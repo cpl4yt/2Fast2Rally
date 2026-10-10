@@ -1,0 +1,74 @@
+#pragma once
+#include <string>
+#include <array>
+
+namespace rally {
+	// Bindable digital actions.
+	enum class Action : int {
+		Throttle, Brake, SteerLeft, SteerRight, Handbrake,
+		ShiftUp, ShiftDown, Reset, Camera, Pause,
+		CallNote, NavView, LookBack, Debug,
+		Count
+	};
+	const char* actionName(Action a);
+
+	// One analog axis binding (gamepad / wheel).
+	struct AxisBinding {
+		int axis = -1;        // raylib gamepad axis index, -1 = unbound
+		bool invert = false;
+		// 0 = centered stick (-1..1), 1 = pedal/trigger that rests at -1,
+		// 2 = pedal that rests at 0 (0..1)
+		int mode = 0;
+	};
+
+	struct Settings {
+		// --- Graphics ---
+		bool fullscreen = false;
+		bool vsync = true;
+		int windowW = 1600, windowH = 900;
+		float fov = 70.0f;
+		float drawDistance = 450.0f;
+		int particleQuality = 2;  // 0 off, 1 low, 2 high
+		bool showFps = false;
+		bool msaa = true;         // 4x MSAA
+
+		// --- Audio (0..1) ---
+		float masterVolume = 0.8f;
+		float engineVolume = 0.8f;
+		float effectsVolume = 0.8f;
+		float voiceVolume = 1.0f;
+		float musicVolume = 0.4f;
+
+		// --- Gameplay ---
+		bool useMph = false;
+		bool manualGearbox = false;
+		bool abs = true;
+		bool tcs = true;
+		bool antiFlip = true;
+		int defaultCamera = 3;        // cockpit: it's a first-person rally game
+		std::string playerName = "Player";
+		std::string lastJoinAddress = "127.0.0.1";
+		int port = 27420;
+		bool aiCodriverVoice = true;  // navigator: voice plays when notes are called
+
+		// --- Controls ---
+		std::array<int, (int)Action::Count> keys{};     // raylib KeyboardKey
+		std::array<int, (int)Action::Count> keysAlt{};  // secondary key
+		std::array<int, (int)Action::Count> pad{};      // raylib GamepadButton, 0 = unbound
+		AxisBinding steerAxis{ 0, false, 0 };
+		AxisBinding throttleAxis{ 5, false, 1 };
+		AxisBinding brakeAxis{ 4, false, 1 };
+		int gamepadIndex = 0;
+		float steerDeadzone = 0.06f;
+		float steerLinearity = 1.3f;   // >1 = softer around center
+		float keyboardSteerSpeed = 3.2f;
+
+		Settings();
+		void resetControls();
+		bool load(const std::string& path);
+		bool save(const std::string& path) const;
+	};
+
+	Settings& settings();
+	extern const char* kSettingsPath;
+}

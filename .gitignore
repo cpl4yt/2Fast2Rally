@@ -1,0 +1,8 @@
+build/
+build-*/
+dist/
+logs/
+saves/
+settings.json
+*.log
+screenshot*.png
