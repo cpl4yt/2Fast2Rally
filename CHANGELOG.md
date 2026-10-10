@@ -11,6 +11,8 @@
   bind steering, throttle, brake, **clutch** axes and gears 1-6/R/N to any wheel or
   shifter button in Settings -> Controls.
 - New logo (main menu, window and exe icon).
+- **Instrument cluster**: analog tachometer (redline, shift lights, gear window),
+  speedometer, turbo boost gauge, pedal bars and warning lamps replace the HUD box.
 - **Rally mode**: run every stage back to back with a combined time, solo or in co-op.
   Full-rally times get their own leaderboard.
 - **2 new stages**: Ridgeback Gravel (mountain gravel) and Lakeside Sprint
