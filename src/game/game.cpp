@@ -91,7 +91,7 @@ namespace rally {
 
 		if (firstRun_) openScreen(Screen::HowToPlay);
 		if (auto_.selfTest) {
-			if (auto_.rally) { rally_ = RallyState{}; rally_.active = true; rally_.count = (int)stageDefs_.size(); stageIndex_ = 0; }
+			if (auto_.rally) { startRally(std::clamp(auto_.stage, 0, std::max(0, (int)eventNames_.size() - 1))); stageIndex_ = rally_.stageAt(0); }
 			startStage(stageIndex_, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
 			run_.aiDriver = true;
 		}
@@ -115,6 +115,14 @@ namespace rally {
 
 	void Game::loadContent() {
 		stageDefs_ = loadAllStages("res/data/stages", &stagePaths_);
+		// Group stages into rally events, in file order.
+		eventNames_.clear();
+		eventStages_.clear();
+		for (int i = 0; i < (int)stageDefs_.size(); ++i) {
+			auto it = std::find(eventNames_.begin(), eventNames_.end(), stageDefs_[i].event);
+			if (it == eventNames_.end()) { eventNames_.push_back(stageDefs_[i].event); eventStages_.push_back({ i }); }
+			else eventStages_[it - eventNames_.begin()].push_back(i);
+		}
 		reloadCars();
 	}
 
@@ -274,7 +282,7 @@ namespace rally {
 				rally_.index++;
 				autoShots_ = 0;
 				autoTimer_ = 0;
-				startStage(rally_.index, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
+				startStage(rally_.stageAt(rally_.index), carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
 				run_.aiDriver = true;
 			}
 			else if ((run_.phase == RunPhase::Finished && run_.finishedFor > 3.0f) || autoTimer_ > auto_.timeLimit) {
@@ -330,7 +338,7 @@ namespace rally {
 					// Partner rejoined mid-stage: send them straight back in.
 					nlohmann::json j = { {"stage", stageIndex_}, {"car", carIndex_}, {"weather", (int)weather_},
 						{"timeOfDay", (int)timeOfDay_}, {"driverIsHost", lobby_.driverIsHost},
-						{"rally", rally_.active}, {"rallyIndex", rally_.index}, {"rallyCount", rally_.count}, {"rallyTotal", rally_.total} };
+						{"rally", rally_.active}, {"rallyIndex", rally_.index}, {"rallyCount", rally_.count}, {"rallyTotal", rally_.total}, {"rallyEvent", rally_.event} };
 					const CarVisual& v = displayCar();
 					j["resume"] = { {"time", run_.stageTime}, {"progress", run_.progress}, {"penalties", run_.penalties},
 						{"resets", run_.resets}, {"splitIndex", run_.splitIndex}, {"split0", run_.splitTimes[0]}, {"split1", run_.splitTimes[1]},
@@ -397,6 +405,8 @@ namespace rally {
 					rally_.count = j.value("rallyCount", 1);
 					rally_.total = j.value("rallyTotal", 0.0);
 					rally_.stageTimes.assign(rally_.index, 0.0);
+					rally_.event = j.value("rallyEvent", 0);
+					if (rally_.event >= 0 && rally_.event < (int)eventStages_.size()) rally_.stages = eventStages_[rally_.event];
 				}
 				startStage(j.value("stage", 0), j.value("car", 0), (Weather)j.value("weather", 0), (TimeOfDay)j.value("timeOfDay", 0),
 					driverIsHost ? Role::Navigator : Role::Driver, true, resume);

@@ -13,10 +13,12 @@
 - New logo (main menu, window and exe icon).
 - **Instrument cluster**: analog tachometer (redline, shift lights, gear window),
   speedometer, turbo boost gauge, pedal bars and warning lamps replace the HUD box.
-- **Rally mode**: run every stage back to back with a combined time, solo or in co-op.
-  Full-rally times get their own leaderboard.
-- **2 new stages**: Ridgeback Gravel (mountain gravel) and Lakeside Sprint
-  (mixed tarmac/gravel) — 5 stages in total.
+- **25 stages in 5 rally events**: Season Opener (mixed), Rally Kallio (fast forest gravel),
+  Rally Brume (mountain tarmac, incl. snow/ice patches), Rally Frostvik (snow) and
+  Rally Ridgeback (mountain gravel, mixed surfaces, mud). Stages run 1.8-4 km.
+- **Rally mode**: pick an event and drive its stages back to back on a combined time,
+  solo or in co-op. Each event has its own leaderboard. Editor-made stages go into
+  a Custom Stages event.
 - **New car**: Vespera 1.6 FWD hot hatch — 3 cars (AWD, RWD, FWD).
 - **Night** time of day: stars, moonlight, and you drive on your headlights and light pod.
 - **1:1 steering wheels**: a wheel bound through DirectInput steers raw (no smoothing,

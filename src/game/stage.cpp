@@ -28,6 +28,7 @@ namespace rally {
 			d.name = j.value("name", d.name);
 			d.description = j.value("description", d.description);
 			d.environment = j.value("environment", d.environment);
+			d.event = j.value("event", d.id.rfind("custom", 0) == 0 ? std::string("Custom Stages") : d.event);
 			d.surface = surfaceFromName(j.value("surface", std::string("gravel")));
 			d.width = j.value("width", d.width);
 			d.seed = j.value("seed", d.seed);
@@ -66,7 +67,7 @@ namespace rally {
 	bool saveStageDef(const std::string& path, const StageDef& d) {
 		nlohmann::json j;
 		j["id"] = d.id; j["name"] = d.name; j["description"] = d.description;
-		j["environment"] = d.environment; j["surface"] = surfaceKey(d.surface);
+		j["environment"] = d.environment; j["surface"] = surfaceKey(d.surface); j["event"] = d.event;
 		j["width"] = d.width; j["seed"] = d.seed;
 		j["terrainAmplitude"] = d.terrainAmplitude; j["terrainScale"] = d.terrainScale;
 		j["treeDensity"] = d.treeDensity;

@@ -32,6 +32,7 @@ namespace rally {
 		std::string name = "Stage";
 		std::string description;
 		std::string environment = "forest";  // forest | mountain | snow
+		std::string event = "Season Opener";  // rally event this stage belongs to
 		Surface surface = Surface::Gravel;
 		float width = 6.5f;
 		uint32_t seed = 1;

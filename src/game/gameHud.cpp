@@ -539,7 +539,8 @@ namespace rally {
 		if (rally_.active) {
 			bool last = rally_.index + 1 >= rally_.count;
 			char rb[128];
-			std::snprintf(rb, sizeof rb, "RALLY  stage %d of %d   total %s", rally_.index + 1, rally_.count, ui::formatTime(rally_.total).c_str());
+			std::string evName = rally_.event < (int)eventNames_.size() ? eventNames_[rally_.event] : std::string("RALLY");
+			std::snprintf(rb, sizeof rb, "%s  stage %d of %d   total %s", evName.c_str(), rally_.index + 1, rally_.count, ui::formatTime(rally_.total).c_str());
 			ui::text(last ? "RALLY COMPLETE  -  total " + ui::formatTime(rally_.total) : std::string(rb), W * 0.5f, by - 44 * s, 28 * s, last ? ui::kGood : ui::kAccent, ui::Center);
 			bool canDrive = !run_.online || session_.isHost();
 			if (!last && canDrive) {

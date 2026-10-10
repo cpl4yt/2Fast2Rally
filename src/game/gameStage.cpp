@@ -524,6 +524,19 @@ namespace rally {
 		}
 	}
 
+	void Game::startRally(int event) {
+		rally_ = RallyState{};
+		if (eventStages_.empty()) return;
+		rally_.active = true;
+		rally_.event = std::clamp(event, 0, (int)eventStages_.size() - 1);
+		rally_.stages = eventStages_[rally_.event];
+		rally_.count = (int)rally_.stages.size();
+	}
+
+	std::string Game::rallyBoardId(int event) const {
+		return "rally_" + ((event >= 0 && event < (int)eventNames_.size()) ? eventNames_[event] : std::string("all"));
+	}
+
 	void Game::rallyRecordStage() {
 		if (!rally_.active) return;
 		if ((int)rally_.stageTimes.size() > rally_.index) return; // already counted
@@ -540,7 +553,7 @@ namespace rally {
 			r.car = cars_[carIndex_].name;
 			r.date = todayString();
 			r.splits = rally_.stageTimes;
-			run_.rank = leaderboard_.add("rally_all", r);
+			run_.rank = leaderboard_.add(rallyBoardId(rally_.event), r);
 			rally_.recorded = true;
 		}
 	}

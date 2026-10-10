@@ -155,12 +155,14 @@ namespace rally {
 		for (auto& d : stageDefs_) stages.push_back(d.name);
 		for (auto& c : cars_) carNames.push_back(c.name);
 		int mode = soloRally_ ? 1 : 0;
-		if (ui::choice({ x, y, w, h }, "Mode", mode, { "Single stage", "Full rally (" + std::to_string(stageDefs_.size()) + " stages)" })) soloRally_ = mode == 1;
+		if (ui::choice({ x, y, w, h }, "Mode", mode, { "Single stage", "Rally event" })) soloRally_ = mode == 1;
 		y += h + g;
 		if (!soloRally_) ui::choice({ x, y, w, h }, "Stage", stageIndex_, stages);
 		else {
-			ui::panel({ x, y, w, h }, Color{ 30, 33, 40, 200 });
-			ui::text("All stages back to back, times added up", x + 16 * s, y + h * 0.28f, h * 0.42f, ui::kTextDim);
+			std::vector<std::string> evs;
+			for (size_t i = 0; i < eventNames_.size(); ++i) evs.push_back(eventNames_[i] + " (" + std::to_string(eventStages_[i].size()) + " stages)");
+			ui::choice({ x, y, w, h }, "Event", soloEvent_, evs);
+			if (soloEvent_ < (int)eventStages_.size() && !eventStages_[soloEvent_].empty()) stageIndex_ = eventStages_[soloEvent_][0];
 		}
 		y += h + g;
 		if (ui::choice({ x, y, w, h }, "Car", carIndex_, carNames)) menuCarRender_.build(cars_[carIndex_]);
@@ -188,7 +190,7 @@ namespace rally {
 		if (ui::button({ x, y, w * 0.6f, 66 * s }, soloRally_ ? "START RALLY" : "START STAGE")) {
 			rally_ = RallyState{};
 			int first = stageIndex_;
-			if (soloRally_) { rally_.active = true; rally_.count = (int)stageDefs_.size(); first = 0; }
+			if (soloRally_) { startRally(soloEvent_); first = rally_.stageAt(0); }
 			startStage(first, carIndex_, weather_, timeOfDay_, soloAsNavigator_ ? Role::Navigator : Role::Driver, false);
 			return;
 		}
@@ -259,16 +261,13 @@ namespace rally {
 
 	// Starts the lobby's stage, or the current rally stage when a rally is running.
 	void Game::hostStartStage() {
-		if (lobby_.rally && !rally_.active) {
-			rally_ = RallyState{};
-			rally_.active = true;
-			rally_.count = (int)stageDefs_.size();
-		}
+		if (lobby_.rally && !rally_.active) startRally(lobby_.event);
 		if (!lobby_.rally) rally_ = RallyState{};
-		int stage = rally_.active ? rally_.index : lobby_.stage;
+		int stage = rally_.active ? rally_.stageAt(rally_.index) : lobby_.stage;
 		nlohmann::json j = { {"stage", stage}, {"car", lobby_.car}, {"weather", lobby_.weather},
 			{"timeOfDay", lobby_.timeOfDay}, {"driverIsHost", lobby_.driverIsHost},
-			{"rally", rally_.active}, {"rallyIndex", rally_.index}, {"rallyCount", rally_.count}, {"rallyTotal", rally_.total} };
+			{"rally", rally_.active}, {"rallyIndex", rally_.index}, {"rallyCount", rally_.count}, {"rallyTotal", rally_.total},
+			{"rallyEvent", rally_.event} };
 		session_.sendStart(j);
 		startStage(stage, lobby_.car, (Weather)lobby_.weather, (TimeOfDay)lobby_.timeOfDay,
 			lobby_.driverIsHost ? Role::Driver : Role::Navigator, true);
@@ -300,16 +299,21 @@ namespace rally {
 		for (auto& c : cars_) carNames.push_back(c.name);
 		if (host) {
 			bool changed = false;
-			changed |= ui::choice({ x, y, w, h }, "Stage", lobby_.stage, stages); y += h + g;
+			{
+				int mode = lobby_.rally ? 1 : 0;
+				if (ui::choice({ x, y, w, h }, "Mode", mode, { "Single stage", "Rally event" })) { lobby_.rally = mode == 1; changed = true; }
+				y += h + g;
+			}
+			if (!lobby_.rally) { changed |= ui::choice({ x, y, w, h }, "Stage", lobby_.stage, stages); y += h + g; }
+			else {
+				std::vector<std::string> evs;
+				for (size_t i = 0; i < eventNames_.size(); ++i) evs.push_back(eventNames_[i] + " (" + std::to_string(eventStages_[i].size()) + " stages)");
+				changed |= ui::choice({ x, y, w, h }, "Event", lobby_.event, evs); y += h + g;
+			}
 			if (ui::choice({ x, y, w, h }, "Car", lobby_.car, carNames)) { changed = true; menuCarRender_.build(cars_[lobby_.car]); }
 			y += h + g;
 			changed |= ui::choice({ x, y, w, h }, "Weather", lobby_.weather, weatherNames()); y += h + g;
 			changed |= ui::choice({ x, y, w, h }, "Time of day", lobby_.timeOfDay, timeNames()); y += h + g;
-			{
-				int mode = lobby_.rally ? 1 : 0;
-				if (ui::choice({ x, y, w, h }, "Mode", mode, { "Single stage", "Full rally (" + std::to_string(stageDefs_.size()) + " stages)" })) { lobby_.rally = mode == 1; changed = true; }
-				y += h + g;
-			}
 			if (ui::button({ x, y, w, h }, "Swap Driver / Navigator")) { lobby_.driverIsHost = !lobby_.driverIsHost; changed = true; }
 			y += h + g;
 			if (changed) { lobby_.hostReady = false; lobby_.clientReady = false; lobbyChanged(); }
@@ -320,11 +324,12 @@ namespace rally {
 				ui::text(b, x + w - 16 * s, y + 12 * s, 24 * s, ui::kText, ui::Right);
 				y += h + g;
 			};
-			line("Stage", lobby_.stage < (int)stages.size() ? stages[lobby_.stage] : "?");
+			if (lobby_.rally) line("Rally event", lobby_.event < (int)eventNames_.size() ? eventNames_[lobby_.event] : "?");
+			else line("Stage", lobby_.stage < (int)stages.size() ? stages[lobby_.stage] : "?");
 			line("Car", lobby_.car < (int)carNames.size() ? carNames[lobby_.car] : "?");
 			line("Weather", weatherNames()[std::clamp(lobby_.weather, 0, 2)]);
 			line("Time of day", timeNames()[std::clamp(lobby_.timeOfDay, 0, 2)]);
-			line("Mode", lobby_.rally ? "Full rally" : "Single stage");
+			line("Mode", lobby_.rally ? "Rally event" : "Single stage");
 			ui::text("The host picks the stage, car and roles.", x + 16 * s, y + 8 * s, 20 * s, ui::kTextDim);
 			y += h + g;
 		}
@@ -517,12 +522,12 @@ namespace rally {
 		y += 100 * s;
 		std::vector<std::string> stages;
 		for (auto& d : stageDefs_) stages.push_back(d.name);
-		stages.push_back("Full Rally (all stages)");
+		for (auto& e : eventNames_) stages.push_back("Rally: " + e);
 		ui::choice({ x, y, w * 0.6f, 54 * s }, "Stage", boardStage_, stages);
 		y += 74 * s;
 		if (!stageDefs_.empty()) {
 			bool rallyBoard = boardStage_ >= (int)stageDefs_.size();
-			const auto& top = leaderboard_.top(rallyBoard ? std::string("rally_all") : stageDefs_[std::clamp(boardStage_, 0, (int)stageDefs_.size() - 1)].id);
+			const auto& top = leaderboard_.top(rallyBoard ? rallyBoardId(boardStage_ - (int)stageDefs_.size()) : stageDefs_[std::clamp(boardStage_, 0, (int)stageDefs_.size() - 1)].id);
 			float cols[] = { 0, 60, 230, 430, 630, 860 };
 			const char* heads[] = { "#", "Time", "Driver", "Navigator", "Car", "Date" };
 			for (int i = 0; i < 6; ++i) ui::text(heads[i], x + cols[i] * s, y, 22 * s, ui::kTextDim);
@@ -598,7 +603,7 @@ namespace rally {
 		ry += 12 * s;
 		head(rx, ry, "RULES");
 		line(rx, ry, "Reset or roll over: +5 s.   Cut a corner: +2 s.");
-		line(rx, ry, "Rally mode: every stage back to back, times added up.");
+		line(rx, ry, "Rally mode: pick an event, drive its stages back to back.");
 
 		if (ui::button({ x, H - 100 * s, 340 * s, 62 * s }, firstRun_ ? "Let's go!" : "Back") || ui::back()) {
 			firstRun_ = false;

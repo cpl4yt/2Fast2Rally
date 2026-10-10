@@ -299,6 +299,7 @@ namespace rally {
 			std::string id = "custom_" + std::to_string((long long)std::time(nullptr));
 			uint32_t seed = (uint32_t)std::time(nullptr);
 			StageDef d = generateStage(id, "Custom Stage", e.def.environment, e.def.surface, seed, 2500);
+			d.event = "Custom Stages";
 			std::string path = "res/data/stages/" + id + ".json";
 			saveStageDef(path, d);
 			if (std::filesystem::exists("../res/data/stages")) saveStageDef("../" + path, d);

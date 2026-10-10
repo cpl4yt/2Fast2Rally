@@ -9,7 +9,7 @@ namespace rally {
 	nlohmann::json LobbyState::toJson() const {
 		return { {"hostName", hostName}, {"clientName", clientName}, {"clientConnected", clientConnected},
 			{"driverIsHost", driverIsHost}, {"stage", stage}, {"car", car}, {"weather", weather},
-			{"timeOfDay", timeOfDay}, {"hostReady", hostReady}, {"clientReady", clientReady}, {"rally", rally} };
+			{"timeOfDay", timeOfDay}, {"hostReady", hostReady}, {"clientReady", clientReady}, {"rally", rally}, {"event", event} };
 	}
 
 	void LobbyState::fromJson(const nlohmann::json& j) {
@@ -24,6 +24,7 @@ namespace rally {
 		hostReady = j.value("hostReady", hostReady);
 		clientReady = j.value("clientReady", clientReady);
 		rally = j.value("rally", rally);
+		event = j.value("event", event);
 	}
 
 	void packCar(const CarVisual& v, CarStatePacket& p) {

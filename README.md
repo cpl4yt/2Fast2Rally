@@ -6,14 +6,14 @@ has the pace notes and the stage map; the driver only sees what the navigator
 calls. Built in C++ on raylib, reusing the engine pieces from Prairie
 (rigid-body physics, ENet networking, build setup, tree/rock models).
 
-**Version 1.0.0** - 5 stages, 3 cars (AWD / RWD / FWD), gravel / tarmac / snow / mixed, clear / overcast / rain, day / dusk / night, single stages or a full rally, steering-wheel force feedback and gamepad rumble.
+**Version 1.0.0** - 25 stages in 5 rally events, 3 cars (AWD / RWD / FWD), gravel / tarmac / snow / mixed, clear / overcast / rain, day / dusk / night, single stages or a full rally, steering-wheel force feedback and gamepad rumble.
 
 ---
 
 ## Playing
 
 ### Solo
-Main menu -> **Solo**. Pick *Single stage* or *Full rally* (every stage back to back, times added up), then a car, weather, time of day and a role:
+Main menu -> **Solo**. Pick *Single stage* or *Rally event* (5 stages back to back, times added up), then a car, weather, time of day and a role:
 - **Driver** - an AI co-driver reads the pace notes to you.
 - **Navigator** - an AI drives; you practise calling the notes on time.
 

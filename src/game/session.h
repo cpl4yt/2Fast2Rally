@@ -14,7 +14,8 @@ namespace rally {
 		bool driverIsHost = true;
 		int stage = 0, car = 0, weather = 0, timeOfDay = 0;
 		bool hostReady = false, clientReady = false;
-		bool rally = false;          // run every stage back to back
+		bool rally = false;          // run a rally event's stages back to back
+		int event = 0;               // which rally event
 		nlohmann::json toJson() const;
 		void fromJson(const nlohmann::json& j);
 	};

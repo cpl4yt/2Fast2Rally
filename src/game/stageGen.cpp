@@ -205,28 +205,76 @@ namespace rally {
 	void ensureDefaultStages(const std::string& dir) {
 		std::error_code ec;
 		std::filesystem::create_directories(dir, ec);
-		struct Def { const char* id; const char* name; const char* env; Surface surf; uint32_t seed; float len; const char* desc; };
+		// mix: 0 none, 1 gravel patches on tarmac, 2 tarmac sections on gravel,
+		//      3 mud patches, 4 snow/ice patches on tarmac (winter mountain)
+		struct Def { const char* id; const char* name; const char* event; const char* env; Surface surf; uint32_t seed; float len; int mix; float trees; const char* desc; };
 		const Def defs[] = {
-			{ "01_kallio_forest", "Kallio Forest", "forest", Surface::Gravel, 1207, 3000, "Fast, flowing gravel through pine forest. Watch the jumps and the bridge." },
-			{ "02_col_de_brume", "Col de Brume", "mountain", Surface::Tarmac, 4421, 3000, "Twisting mountain tarmac with hairpins and big drops." },
-			{ "03_frostvik_snow", "Frostvik Snow", "snow", Surface::Snow, 7731, 2000, "Snowbanks, low grip and long sweepers. Lean on the banks." },
-			{ "04_ridgeback_gravel", "Ridgeback Gravel", "mountain", Surface::Gravel, 9157, 2600, "Loose mountain gravel with hairpins and drops. Brake early, turn in late." },
-			{ "05_lakeside_sprint", "Lakeside Sprint", "forest", Surface::Tarmac, 3389, 2200, "Fast forest tarmac broken up by gravel sections. Watch the surface changes." },
+			// --- Season Opener (one of everything) ---
+			{ "01_kallio_forest", "Kallio Forest", "Season Opener", "forest", Surface::Gravel, 1207, 3000, 0, 1.0f, "Fast, flowing gravel through pine forest. Watch the jumps and the bridge." },
+			{ "02_col_de_brume", "Col de Brume", "Season Opener", "mountain", Surface::Tarmac, 4421, 3000, 0, 1.0f, "Twisting mountain tarmac with tight corners and big drops." },
+			{ "03_frostvik_snow", "Frostvik Snow", "Season Opener", "snow", Surface::Snow, 7731, 2000, 0, 1.0f, "Snowbanks, low grip and long sweepers. Lean on the banks." },
+			{ "04_ridgeback_gravel", "Ridgeback Gravel", "Season Opener", "mountain", Surface::Gravel, 9157, 2600, 0, 1.0f, "Loose mountain gravel with tight corners and drops. Brake early, turn in late." },
+			{ "05_lakeside_sprint", "Lakeside Sprint", "Season Opener", "forest", Surface::Tarmac, 3389, 2200, 1, 1.0f, "Fast forest tarmac broken up by gravel sections. Watch the surface changes." },
+			// --- Rally Kallio: fast forest gravel ---
+			{ "06_harju_ridge", "Harju Ridge", "Rally Kallio", "forest", Surface::Gravel, 2311, 3400, 0, 1.0f, "Crests and blind jumps along a forest ridge. Trust the notes." },
+			{ "07_makela_jumps", "Makela Jumps", "Rally Kallio", "forest", Surface::Gravel, 2719, 2800, 0, 0.9f, "Short and brutal: big jumps, bridges and flat-out straights." },
+			{ "08_pine_valley", "Pine Valley", "Rally Kallio", "forest", Surface::Gravel, 3121, 3800, 3, 1.1f, "A long valley stage with muddy sections where the grip disappears." },
+			{ "09_lakkala", "Lakkala", "Rally Kallio", "forest", Surface::Gravel, 3557, 2400, 0, 1.3f, "Narrow and tree-lined. Any mistake ends in the pines." },
+			{ "10_koivu_run", "Koivu Run", "Rally Kallio", "forest", Surface::Gravel, 3989, 4000, 0, 1.0f, "The longest stage of the rally: fast birch-lined gravel." },
+			// --- Rally Brume: mountain tarmac ---
+			{ "11_col_du_vent", "Col du Vent", "Rally Brume", "mountain", Surface::Tarmac, 5101, 3200, 0, 0.8f, "Windy climb over the col. Smooth tarmac, wide views, steep drops." },
+			{ "12_pont_rouge", "Pont Rouge", "Rally Brume", "mountain", Surface::Tarmac, 5413, 2600, 1, 0.8f, "Tarmac with gravel cuts dragged onto the road. Grip changes without warning." },
+			{ "13_lacets_dor", "Lacets d'Or", "Rally Brume", "mountain", Surface::Tarmac, 5867, 3600, 4, 0.7f, "Winter mountain road: dry tarmac, then patches of snow and ice." },
+			{ "14_mont_sauvage", "Mont Sauvage", "Rally Brume", "mountain", Surface::Tarmac, 6211, 2900, 0, 0.9f, "Rhythmic medium-speed corners. Find the flow." },
+			{ "15_vallon_noir", "Vallon Noir", "Rally Brume", "mountain", Surface::Tarmac, 6653, 3900, 0, 1.0f, "Dark valley road with a long final descent. Save your brakes." },
+			// --- Rally Frostvik: snow ---
+			{ "16_isvik", "Isvik", "Rally Frostvik", "snow", Surface::Snow, 8011, 2800, 0, 1.0f, "Classic snow stage: high banks to lean on through every sweeper." },
+			{ "17_frostbacka", "Frostbacka", "Rally Frostvik", "snow", Surface::Snow, 8329, 3300, 0, 1.1f, "Crests on snow. Lift and you lose it." },
+			{ "18_norrby", "Norrby", "Rally Frostvik", "snow", Surface::Snow, 8761, 2200, 0, 0.9f, "Short, technical and slippery village roads." },
+			{ "19_white_lakes", "White Lakes", "Rally Frostvik", "snow", Surface::Snow, 9013, 3700, 0, 0.8f, "Fast and open between frozen lakes. Commit to the long corners." },
+			{ "20_polar_dash", "Polar Dash", "Rally Frostvik", "snow", Surface::Snow, 9277, 1800, 0, 1.2f, "A flat-out sprint. Every tenth counts." },
+			// --- Rally Ridgeback: mountain gravel and mixed ---
+			{ "21_ridgeback_north", "Ridgeback North", "Rally Ridgeback", "mountain", Surface::Gravel, 10111, 3100, 0, 0.8f, "Rocky mountain gravel. Rough, loose and fast between the corners." },
+			{ "22_dust_bowl", "Dust Bowl", "Rally Ridgeback", "mountain", Surface::Gravel, 10433, 2600, 0, 0.5f, "Open, dusty and sweeping. Visibility drops behind every slide." },
+			{ "23_canyon_mill", "Canyon Mill", "Rally Ridgeback", "mountain", Surface::Gravel, 10889, 3500, 2, 0.8f, "Gravel with tarmac sections through the old mill. Re-learn the grip each time." },
+			{ "24_quarry_road", "Quarry Road", "Rally Ridgeback", "mountain", Surface::Gravel, 11257, 2300, 3, 0.6f, "Quarry haul roads with deep mud in the low parts." },
+			{ "25_old_mine", "Old Mine", "Rally Ridgeback", "mountain", Surface::Gravel, 11621, 4000, 2, 0.9f, "The rally finale: long, mixed-surface and relentless." },
 		};
 		for (const Def& d : defs) {
 			std::string path = dir + "/" + d.id + ".json";
 			if (std::filesystem::exists(path)) continue;
 			StageDef sd = generateStage(d.id, d.name, d.env, d.surf, d.seed, d.len);
 			sd.description = d.desc;
-			if (std::string(d.id) == "05_lakeside_sprint") {
-				// Mixed surface: gravel sections between the tarmac.
-				sd.surfaceSegments.push_back({ d.len * 0.28f, d.len * 0.42f, Surface::Gravel });
-				sd.surfaceSegments.push_back({ d.len * 0.66f, d.len * 0.8f, Surface::Gravel });
+			sd.event = d.event;
+			sd.treeDensity *= d.trees;
+			sd.surfaceSegments.clear();
+			float L = d.len;
+			switch (d.mix) {
+			case 1: // gravel patches on tarmac
+				sd.surfaceSegments.push_back({ L * 0.28f, L * 0.42f, Surface::Gravel });
+				sd.surfaceSegments.push_back({ L * 0.66f, L * 0.8f, Surface::Gravel });
+				break;
+			case 2: // tarmac sections on gravel
+				sd.surfaceSegments.push_back({ L * 0.2f, L * 0.36f, Surface::Tarmac });
+				sd.surfaceSegments.push_back({ L * 0.58f, L * 0.72f, Surface::Tarmac });
+				break;
+			case 3: // mud
+				sd.surfaceSegments.push_back({ L * 0.3f, L * 0.3f + 90.0f, Surface::Mud });
+				sd.surfaceSegments.push_back({ L * 0.62f, L * 0.62f + 120.0f, Surface::Mud });
+				break;
+			case 4: // snow/ice patches on tarmac
+				sd.surfaceSegments.push_back({ L * 0.35f, L * 0.35f + 140.0f, Surface::Snow });
+				sd.surfaceSegments.push_back({ L * 0.55f, L * 0.55f + 80.0f, Surface::Snow });
+				sd.surfaceSegments.push_back({ L * 0.75f, L * 0.75f + 160.0f, Surface::Snow });
+				break;
+			default:
+				// Forest gravel stages keep the generator's single mud patch.
+				if (std::string(d.env) == "forest" && d.surf == Surface::Gravel) sd.surfaceSegments.push_back({ L * 0.5f, L * 0.5f + 90.0f, Surface::Mud });
+				break;
 			}
-			if (saveStageDef(path, sd)) log::info("stagegen: wrote %s (%d points)", path.c_str(), (int)sd.points.size());
+			if (saveStageDef(path, sd)) log::info("stagegen: wrote %s (%d points, event %s)", path.c_str(), (int)sd.points.size(), d.event);
 		}
 	}
-
 	std::vector<StageDef> loadAllStages(const std::string& dir, std::vector<std::string>* paths) {
 		std::vector<std::string> files;
 		std::error_code ec;

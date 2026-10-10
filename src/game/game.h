@@ -195,7 +195,15 @@ namespace rally {
 			double total = 0;
 			std::vector<double> stageTimes;
 			bool recorded = false;
+			int event = 0;              // index into eventNames_
+			std::vector<int> stages;    // stage indices of this event, in order
+			int stageAt(int i) const { return stages.empty() ? i : stages[std::clamp(i, 0, (int)stages.size() - 1)]; }
 		} rally_;
+		std::vector<std::string> eventNames_;          // rally events, in stage order
+		std::vector<std::vector<int>> eventStages_;    // stage indices per event
+		int soloEvent_ = 0;
+		void startRally(int event);
+		std::string rallyBoardId(int event) const;
 		bool soloRally_ = false;
 		void rallyRecordStage();
 		void screenHowToPlay();
