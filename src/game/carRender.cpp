@@ -331,7 +331,7 @@ namespace rally {
 			mat.maps[MATERIAL_MAP_DIFFUSE].texture = numberRT_.texture;
 			rlDisableBackfaceCulling();
 			for (float sx : { 1.0f, -1.0f }) {
-				Matrix m = MatrixMultiply(MatrixScale(1, 0.34f, sx > 0 ? 0.34f : -0.34f), MatrixTranslate(sx * (spec_.halfExtents.x + 0.012f), spec_.halfExtents.y - 0.1f, -0.25f));
+				Matrix m = MatrixMultiply(MatrixScale(1, 0.34f, sx > 0 ? -0.34f : 0.34f), MatrixTranslate(sx * (spec_.halfExtents.x + 0.012f), spec_.halfExtents.y - 0.1f, -0.25f));
 				DrawMesh(numberQuad_, mat, MatrixMultiply(m, bodyM));
 			}
 			rlEnableBackfaceCulling();
@@ -373,7 +373,7 @@ namespace rally {
 		DrawMesh(crew_, mat, bodyM);
 		{
 			Vector3 hub = { 0.38f, driverEye_.y - 0.3f, driverEye_.z + 0.55f };
-			Matrix m = MatrixMultiply(MatrixRotateZ(-v.steerInput * 2.4f), MatrixRotateX(-0.35f));
+			Matrix m = MatrixMultiply(MatrixRotateZ(v.steerInput * 2.4f), MatrixRotateX(-0.35f)); // +steer = right = clockwise for the driver
 			m = MatrixMultiply(m, MatrixTranslate(hub.x, hub.y, hub.z));
 			DrawMesh(steering_, mat, MatrixMultiply(m, bodyM));
 		}

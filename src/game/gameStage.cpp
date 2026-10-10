@@ -2,6 +2,7 @@
 #include "core/input.h"
 #include "core/ui.h"
 #include "core/log.h"
+#include "core/forceFeedback.h"
 #include <raymath.h>
 #include <rlgl.h>
 #include <cmath>
@@ -63,6 +64,7 @@ namespace rally {
 		ClearBackground(BLACK);
 
 		run_ = RunState{};
+		aiReverse_ = aiSlowTimer_ = aiStuckTimer_ = 0;
 		run_.role = role;
 		run_.online = online;
 		run_.aiCodriver = !online && role == Role::Driver;
@@ -83,7 +85,8 @@ namespace rally {
 		RoadSample s0 = stage_.sampleAt(stage_.startS - 12.0f);
 		float yaw = std::atan2(s0.dir.x, s0.dir.y);
 		car_.init(physics_, cars_[carIndex_], { s0.pos.x, s0.pos.y + 0.8f, s0.pos.z }, yaw);
-		car_.manualGearbox = settings().manualGearbox;
+		car_.transmission = auto_.hTest ? 2 : ((run_.aiDriver || run_.role != Role::Driver) ? 0 : settings().transmission);
+		hTestState_ = 0; hTestTimer_ = 0;
 		car_.absEnabled = settings().abs;
 		car_.tcsEnabled = settings().tcs || run_.aiDriver;
 		car_.antiFlip = settings().antiFlip;
@@ -211,6 +214,7 @@ namespace rally {
 		if (driver) {
 			if (!run_.paused) {
 				accumulator_ += dt;
+				edgesConsumed_ = false;
 				int guard = 0;
 				while (accumulator_ >= kStep && guard++ < 12) {
 					prevVisual_ = curVisual_;
@@ -279,6 +283,7 @@ namespace rally {
 		if (run_.partnerLost && run_.online) run_.paused = true;
 
 		updateAudio(dt);
+		updateForceFeedback(dt);
 		const CarVisual& dv = displayCar();
 		if (!run_.paused) {
 			bool backfire = false;
@@ -295,9 +300,44 @@ namespace rally {
 	// Fixed step
 	// ------------------------------------------------------------------
 	void Game::driverInput(DriveInput& in, float dt) {
-		(void)dt;
+		if (auto_.hTest && run_.phase == RunPhase::Running) {
+			// Scripted H-pattern driver for testing: AI steers and picks the
+			// speed, this works clutch, gears and throttle like a person would.
+			aiDrive(in);
+			float aiThrottle = in.throttle;
+			hTestTimer_ += dt;
+			in.hGear = -2;
+			switch (hTestState_) {
+			case 0: // clutch in, first gear
+				in.clutch = 1.0f; in.throttle = 0.0f; in.hGear = 1;
+				if (hTestTimer_ > 0.6f) { hTestState_ = 1; hTestTimer_ = 0; }
+				break;
+			case 1: // launch: some revs, let the clutch out over 1.4 s
+				in.throttle = 0.5f;
+				in.clutch = std::max(0.0f, 1.0f - hTestTimer_ / 1.4f);
+				if (hTestTimer_ > 1.5f) { hTestState_ = 2; hTestTimer_ = 0; }
+				break;
+			case 2: // driving
+				in.clutch = 0.0f; in.throttle = aiThrottle;
+				if (car_.rpm() > cars_[carIndex_].redline * 0.88f && car_.gear() < (int)cars_[carIndex_].gears.size()) { hTestState_ = 3; hTestTimer_ = 0; hTestTarget_ = car_.gear() + 1; }
+				else if (car_.rpm() < cars_[carIndex_].idleRpm * 1.6f && car_.gear() > 1) { hTestState_ = 3; hTestTimer_ = 0; hTestTarget_ = car_.gear() - 1; }
+				break;
+			case 3: // shift: clutch in, lift, select, then ease the clutch out
+				in.throttle = hTestTimer_ < 0.15f ? 0.0f : aiThrottle * 0.6f;
+				in.clutch = hTestTimer_ < 0.2f ? 1.0f : std::max(0.0f, 1.0f - (hTestTimer_ - 0.2f) / 0.35f);
+				if (hTestTimer_ > 0.12f) in.hGear = hTestTarget_;
+				if (hTestTimer_ > 0.6f) { hTestState_ = 2; hTestTimer_ = 0; ++hTestShifts_; }
+				break;
+			}
+			if (!car_.engineRunning()) { in.clutch = 1.0f; in.hGear = 0; in.ignition = true; hTestState_ = 0; hTestTimer_ = 0; ++hTestStalls_; }
+			return;
+		}
 		if (run_.aiDriver) aiDrive(in);
 		else in = input::drive();
+		// Button presses are edges: the fixed-step loop can run several
+		// physics steps per frame, but a press must only count once.
+		if (edgesConsumed_) { in.shiftUp = in.shiftDown = in.ignition = false; if (!input::shifterHeld()) in.hGear = -2; }
+		edgesConsumed_ = true;
 	}
 
 	void Game::simStep(float h) {
@@ -324,6 +364,8 @@ namespace rally {
 		if (car_.pendingShift) { car_.pendingShift = false; ++run_.shiftSeq; synth::triggerShift(); }
 		if (car_.pendingBackfires > 0) { synth::triggerBackfire(car_.pendingBackfires); car_.pendingBackfires = 0; ++run_.backfireSeq; }
 		if (car_.pendingBlowOff) { car_.pendingBlowOff = false; synth::triggerBlowOff(); }
+		if (car_.pendingGrind) { car_.pendingGrind = false; synth::triggerShift(); synth::triggerImpact(0.18f); setMessage("Crunch! Press the clutch to change gear", ui::kBad, 1.5f); }
+		if (car_.pendingStall) { car_.pendingStall = false; synth::triggerShift(); setMessage("STALLED - clutch in or neutral, then Ignition (I)", ui::kBad, 3.0f); }
 		if (car_.lastImpact > 0.0f) {
 			float strength = std::clamp((car_.lastImpact - 2.5f) / 10.0f, 0.15f, 1.0f);
 			synth::triggerImpact(strength);
@@ -342,8 +384,20 @@ namespace rally {
 		if (run_.phase == RunPhase::Running && !run_.aiDriver && input::pressed(Action::Reset)) resetToRoad(true, "Reset");
 		// The AI can't reverse out of trouble: if it's been stuck, put it back.
 		if (run_.phase == RunPhase::Running && run_.aiDriver) {
-			aiStuckTimer_ = std::fabs(car_.speed()) < 1.0f ? aiStuckTimer_ + h : 0.0f;
-			if (aiStuckTimer_ > 4.0f) {
+			bool slow = std::fabs(car_.speed()) < 1.0f;
+			aiStuckTimer_ = slow ? aiStuckTimer_ + h : (aiReverse_ > 0.0f ? aiStuckTimer_ : 0.0f);
+			// After a moment stuck, try reversing out before giving up.
+			if (slow && aiReverse_ <= 0.0f) {
+				aiSlowTimer_ += h;
+				if (aiSlowTimer_ > 1.2f) { aiReverse_ = 1.6f; aiSlowTimer_ = 0; }
+			}
+			else if (!slow) aiSlowTimer_ = 0;
+			if (auto_.selfTest && aiStuckTimer_ > 5.0f && !stuckShotTaken_ && resetShots_ < 4) {
+				pendingShot_ = auto_.shotPrefix + "_stuck" + std::to_string(resetShots_++) + ".png";
+				stuckShotTaken_ = true;
+			}
+			if (aiStuckTimer_ > 6.0f) {
+				stuckShotTaken_ = false;
 				aiStuckTimer_ = 0;
 				// Stuck at the same place again: move on a little further.
 				bool repeat = std::fabs(run_.progress - aiLastStuckS_) < 25.0f;
@@ -402,6 +456,8 @@ namespace rally {
 			}
 			bool lost = std::fabs(run_.lateral) > hw + 28.0f || p.y < rs.pos.y - 7.0f;
 			run_.lostTimer = lost ? run_.lostTimer + kStep : 0.0f;
+			if (auto_.selfTest && run_.lostTimer > 2.0f && run_.lostTimer < 2.0f + kStep * 1.5f && resetShots_ < 4)
+				pendingShot_ = auto_.shotPrefix + "_lost" + std::to_string(resetShots_++) + ".png";
 			if (run_.lostTimer > 2.5f) { run_.lostTimer = 0; resetToRoad(true, "Off course"); }
 			if (car_.timeUpsideDown > 3.0f) resetToRoad(true, "Rolled");
 		}
@@ -450,6 +506,7 @@ namespace rally {
 			session_.sendStageEvent({ {"kind", "finish"}, {"stageTime", run_.stageTime}, {"penalties", run_.penalties},
 				{"resets", run_.resets}, {"cuts", run_.cuts}, {"split0", run_.splitTimes[0]}, {"split1", run_.splitTimes[1]} });
 		}
+		rallyRecordStage();
 		if (!run_.recorded && !auto_.selfTest) {
 			RunRecord r;
 			r.time = run_.finishTime;
@@ -464,6 +521,27 @@ namespace rally {
 			r.splits = { run_.splitTimes[0], run_.splitTimes[1] };
 			run_.rank = leaderboard_.add(stage_.def.id, r);
 			run_.recorded = true;
+		}
+	}
+
+	void Game::rallyRecordStage() {
+		if (!rally_.active) return;
+		if ((int)rally_.stageTimes.size() > rally_.index) return; // already counted
+		rally_.stageTimes.push_back(run_.finishTime);
+		rally_.total += run_.finishTime;
+		bool last = rally_.index + 1 >= rally_.count;
+		if (last && !rally_.recorded && !auto_.selfTest) {
+			RunRecord r;
+			r.time = rally_.total;
+			std::string me = settings().playerName;
+			std::string partner = run_.online ? session_.partnerName() : (run_.aiDriver ? "AI" : "AI co-driver");
+			r.driver = run_.role == Role::Driver ? me : partner;
+			r.navigator = run_.role == Role::Driver ? partner : me;
+			r.car = cars_[carIndex_].name;
+			r.date = todayString();
+			r.splits = rally_.stageTimes;
+			run_.rank = leaderboard_.add("rally_all", r);
+			rally_.recorded = true;
 		}
 	}
 
@@ -509,6 +587,13 @@ namespace rally {
 		in.brake = std::clamp((speed - vmax) * 0.25f, 0.0f, 1.0f);
 		if (speed < 3.0f && run_.phase == RunPhase::Running) { in.throttle = std::max(in.throttle, 0.6f); in.brake = 0; }
 		in.handbrake = false;
+		// Backing out of trouble: reverse with opposite lock.
+		if (aiReverse_ > 0.0f && run_.phase == RunPhase::Running) {
+			aiReverse_ -= 1.0f / 120.0f;
+			in.throttle = 0.0f;
+			in.brake = 0.8f;
+			in.steer = -in.steer;
+		}
 	}
 
 	void Game::aiCodriver() {
@@ -545,8 +630,10 @@ namespace rally {
 			else ++run_.goodCalls;
 		}
 		else ++run_.goodCalls;
-		if (settings().aiCodriverVoice && !alreadyCalled) voice_.say(noteWords(n));
-		else if (settings().aiCodriverVoice && fromNetwork && run_.role == Role::Driver) voice_.say(noteWords(n));
+		// Only the AI co-driver speaks. With a human co-driver (co-op, or
+		// navigator practice) the driver gets the icons and the humans talk.
+		bool aiCalling = run_.aiCodriver && run_.role == Role::Driver && !fromNetwork;
+		if (aiCalling && settings().aiCodriverVoice && !alreadyCalled) voice_.say(noteWords(n));
 		if (std::find(run_.hudNotes.begin(), run_.hudNotes.end(), idx) == run_.hudNotes.end()) {
 			run_.hudNotes.push_back(idx);
 			std::sort(run_.hudNotes.begin(), run_.hudNotes.end());
@@ -730,6 +817,52 @@ namespace rally {
 		}
 	}
 
+	void Game::updateForceFeedback(float dt) {
+		Settings& cfg = settings();
+		bool active = run_.role == Role::Driver && !run_.aiDriver && !run_.paused &&
+			(run_.phase == RunPhase::Running || run_.phase == RunPhase::Countdown || run_.phase == RunPhase::Finished);
+		if (!active) { ffb::stopAll(); return; }
+		const CarVisual& v = displayCar();
+		float speed = std::fabs(v.speed);
+
+		// Self-aligning torque from the front tyres' lateral force: the wheel
+		// goes light when the fronts slide (understeer), heavy when they bite.
+		float lat = car_.wheel(0).latForce + car_.wheel(1).latForce;
+		float norm = car_.spec().mass * 9.81f * 0.5f;
+		float align = std::clamp(lat / norm, -1.0f, 1.0f) * std::min(1.0f, speed / 6.0f);
+
+		// Road texture on loose surfaces, scaled with speed.
+		int loose = 0, contact = 0;
+		float slip = 0;
+		for (int i = 0; i < 4; ++i) {
+			if (!(v.wheelContact & (1 << i))) continue;
+			++contact;
+			if (surfaceProps((Surface)v.wheelSurface[i]).loose) ++loose;
+			slip = std::max(slip, v.wheelSlip[i]);
+		}
+		float speedN = std::min(1.0f, speed / 25.0f);
+		float rough = contact ? (float)loose / contact : 0.0f;
+		ffbNoise_ += dt;
+		float texture = rough * speedN * 0.12f * std::sin(ffbNoise_ * 83.0f) * std::sin(ffbNoise_ * 37.0f + 1.3f);
+
+		// Kick on impacts.
+		if (run_.impactSeq != ffbSeenImpact_) {
+			ffbSeenImpact_ = run_.impactSeq;
+			ffbKick_ = run_.impactStrength * ((run_.impactSeq & 1) ? 1.0f : -1.0f);
+		}
+		ffbKick_ *= std::max(0.0f, 1.0f - dt * 12.0f);
+
+		float sign = cfg.ffbInvert ? -1.0f : 1.0f;
+		float constant = (align * 0.85f + texture + ffbKick_ * 0.7f) * cfg.ffbStrength * sign;
+		float spring = (0.06f + 0.3f * std::min(1.0f, speed / 30.0f)) * cfg.ffbStrength;
+		float damper = 0.1f + 0.12f * cfg.ffbStrength;
+		ffb::setWheel(constant, spring, damper);
+
+		if (cfg.rumble && input::usingGamepad())
+			ffb::setRumble(std::min(1.0f, slip * 0.35f + std::fabs(ffbKick_)), std::min(1.0f, rough * speedN * 0.25f + slip * 0.15f));
+		else ffb::setRumble(0, 0);
+	}
+
 	void Game::drawStage3D(float dt) {
 		const CarVisual& v = displayCar();
 		Matrix rot = QuaternionToMatrix(v.rotation);
@@ -747,8 +880,12 @@ namespace rally {
 		bool interior = (run_.role == Role::Driver && camMode_ >= 2) || (run_.role == Role::Navigator && navView_ != 1);
 		carRender_.draw(world_, v, dt, world_.env().lampIntensity > 0.0f, interior ? CarView::Interior : CarView::Exterior);
 		world_.drawWater();
-		particles_.draw(cam_, world_.particleTexture());
-		particles_.drawWeather(cam_, dt, world_.env().precipitation && !world_.env().snowfall, world_.env().snowfall, v.velocity);
+		{
+			const Environment& e = world_.env();
+			float light = std::clamp(0.3f * (e.ambient.x + e.ambient.y + e.ambient.z) + 0.25f * (e.sunColor.x + e.sunColor.y + e.sunColor.z), 0.12f, 1.0f);
+			particles_.draw(cam_, world_.particleTexture(), light);
+			particles_.drawWeather(cam_, dt, e.precipitation && !e.snowfall, e.snowfall, v.velocity, std::max(0.35f, light));
+		}
 		EndMode3D();
 	}
 }

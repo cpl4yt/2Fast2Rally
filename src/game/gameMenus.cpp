@@ -2,6 +2,8 @@
 #include "core/input.h"
 #include "core/ui.h"
 #include "core/log.h"
+#include "core/forceFeedback.h"
+#include "core/joystick.h"
 #include <raymath.h>
 #include <rlgl.h>
 #include <cmath>
@@ -53,7 +55,7 @@ namespace rally {
 		}
 
 		std::vector<std::string> weatherNames() { return { "Clear", "Overcast", "Rain" }; }
-		std::vector<std::string> timeNames() { return { "Day", "Dusk" }; }
+		std::vector<std::string> timeNames() { return { "Day", "Dusk", "Night" }; }
 	}
 
 	// ------------------------------------------------------------------
@@ -109,11 +111,22 @@ namespace rally {
 		float s = ui::s();
 		int H = GetScreenHeight();
 		float x = 90 * s, y = H * 0.12f;
-		ui::text("2FAST2RALLY", x, y, 110 * s, ui::kAccent, ui::Left, true);
-		ui::text("Co-op rally: one drives, one navigates.", x + 6 * s, y + 120 * s, 30 * s, ui::kText);
-		y += 210 * s;
-		float bw = 460 * s, bh = 62 * s, gap = 14 * s;
-		if (ui::button({ x, y, bw, bh }, "Solo Stage")) openScreen(Screen::SoloSetup);
+		if (logo_.id) {
+			// Logo (res/logo.png): fit into a 270x270 box at the top left.
+			y = H * 0.03f;
+			float sc = std::min(460 * s / logo_.width, 270 * s / logo_.height);
+			DrawTextureEx(logo_, { x + 95 * s, y }, 0.0f, sc, WHITE);
+			y += logo_.height * sc + 6 * s;
+			ui::text("Co-op rally: one drives, one navigates.", x + 6 * s, y, 28 * s, ui::kText);
+			y += 46 * s;
+		}
+		else {
+			ui::text("2FAST2RALLY", x, y, 110 * s, ui::kAccent, ui::Left, true);
+			ui::text("Co-op rally: one drives, one navigates.", x + 6 * s, y + 120 * s, 30 * s, ui::kText);
+			y += 200 * s;
+		}
+		float bw = 460 * s, bh = 56 * s, gap = 10 * s;
+		if (ui::button({ x, y, bw, bh }, "Solo")) openScreen(Screen::SoloSetup);
 		y += bh + gap;
 		if (ui::button({ x, y, bw, bh }, "Host Co-op")) openScreen(Screen::HostMenu);
 		y += bh + gap;
@@ -125,20 +138,31 @@ namespace rally {
 		y += bh + gap;
 		if (ui::button({ x, y, bw, bh }, "Settings")) { settingsReturn_ = Screen::MainMenu; openScreen(Screen::Settings); }
 		y += bh + gap;
+		if (ui::button({ x, y, bw * 0.49f, bh }, "How to Play")) openScreen(Screen::HowToPlay);
+		if (ui::button({ x + bw * 0.51f, y, bw * 0.49f, bh }, "Credits")) openScreen(Screen::Credits);
+		y += bh + gap;
 		if (ui::button({ x, y, bw, bh }, "Quit")) quit_ = true;
-		ui::text(std::string("v") + RALLY_VERSION + " beta  |  F11 fullscreen", x, H - 50 * s, 20 * s, ui::kTextDim);
+		ui::text(std::string("v") + RALLY_VERSION + "  |  F11 fullscreen", x, H - 50 * s, 20 * s, ui::kTextDim);
 	}
 
 	void Game::screenSoloSetup() {
 		float s = ui::s();
 		int H = GetScreenHeight();
 		float x = 90 * s, y = H * 0.1f, w = 640 * s, h = 56 * s, g = 12 * s;
-		ui::text("SOLO STAGE", x, y, 70 * s, ui::kAccent, ui::Left, true);
+		ui::text("SOLO", x, y, 70 * s, ui::kAccent, ui::Left, true);
 		y += 100 * s;
 		std::vector<std::string> stages, carNames;
 		for (auto& d : stageDefs_) stages.push_back(d.name);
 		for (auto& c : cars_) carNames.push_back(c.name);
-		ui::choice({ x, y, w, h }, "Stage", stageIndex_, stages); y += h + g;
+		int mode = soloRally_ ? 1 : 0;
+		if (ui::choice({ x, y, w, h }, "Mode", mode, { "Single stage", "Full rally (" + std::to_string(stageDefs_.size()) + " stages)" })) soloRally_ = mode == 1;
+		y += h + g;
+		if (!soloRally_) ui::choice({ x, y, w, h }, "Stage", stageIndex_, stages);
+		else {
+			ui::panel({ x, y, w, h }, Color{ 30, 33, 40, 200 });
+			ui::text("All stages back to back, times added up", x + 16 * s, y + h * 0.28f, h * 0.42f, ui::kTextDim);
+		}
+		y += h + g;
 		if (ui::choice({ x, y, w, h }, "Car", carIndex_, carNames)) menuCarRender_.build(cars_[carIndex_]);
 		y += h + g;
 		int wi = (int)weather_, ti = (int)timeOfDay_;
@@ -149,7 +173,7 @@ namespace rally {
 		int role = soloAsNavigator_ ? 1 : 0;
 		if (ui::choice({ x, y, w, h }, "Role", role, { "Driver (AI co-driver)", "Navigator (AI driver)" })) soloAsNavigator_ = role == 1;
 		y += h + g;
-		ui::toggle({ x, y, w, h }, "Manual gearbox", settings().manualGearbox); y += h + g * 2;
+		ui::choice({ x, y, w, h }, "Transmission", settings().transmission, { "Automatic", "Sequential", "H-pattern + clutch" }); y += h + g * 2;
 
 		if (!stageDefs_.empty()) {
 			const StageDef& d = stageDefs_[std::clamp(stageIndex_, 0, (int)stageDefs_.size() - 1)];
@@ -161,8 +185,11 @@ namespace rally {
 		}
 		if (!cars_.empty()) ui::text(cars_[carIndex_].description, x, y - 14 * s, 20 * s, ui::kTextDim);
 		y += 24 * s;
-		if (ui::button({ x, y, w * 0.6f, 66 * s }, "START STAGE")) {
-			startStage(stageIndex_, carIndex_, weather_, timeOfDay_, soloAsNavigator_ ? Role::Navigator : Role::Driver, false);
+		if (ui::button({ x, y, w * 0.6f, 66 * s }, soloRally_ ? "START RALLY" : "START STAGE")) {
+			rally_ = RallyState{};
+			int first = stageIndex_;
+			if (soloRally_) { rally_.active = true; rally_.count = (int)stageDefs_.size(); first = 0; }
+			startStage(first, carIndex_, weather_, timeOfDay_, soloAsNavigator_ ? Role::Navigator : Role::Driver, false);
 			return;
 		}
 		if (ui::button({ x + w * 0.64f, y, w * 0.36f, 66 * s }, "Back") || ui::back()) openScreen(Screen::MainMenu);
@@ -230,11 +257,20 @@ namespace rally {
 		if (!joinStatus_.empty()) ui::text(joinStatus_, x, y + 84 * s, 22 * s, ui::kTextDim);
 	}
 
+	// Starts the lobby's stage, or the current rally stage when a rally is running.
 	void Game::hostStartStage() {
-		nlohmann::json j = { {"stage", lobby_.stage}, {"car", lobby_.car}, {"weather", lobby_.weather},
-			{"timeOfDay", lobby_.timeOfDay}, {"driverIsHost", lobby_.driverIsHost} };
+		if (lobby_.rally && !rally_.active) {
+			rally_ = RallyState{};
+			rally_.active = true;
+			rally_.count = (int)stageDefs_.size();
+		}
+		if (!lobby_.rally) rally_ = RallyState{};
+		int stage = rally_.active ? rally_.index : lobby_.stage;
+		nlohmann::json j = { {"stage", stage}, {"car", lobby_.car}, {"weather", lobby_.weather},
+			{"timeOfDay", lobby_.timeOfDay}, {"driverIsHost", lobby_.driverIsHost},
+			{"rally", rally_.active}, {"rallyIndex", rally_.index}, {"rallyCount", rally_.count}, {"rallyTotal", rally_.total} };
 		session_.sendStart(j);
-		startStage(lobby_.stage, lobby_.car, (Weather)lobby_.weather, (TimeOfDay)lobby_.timeOfDay,
+		startStage(stage, lobby_.car, (Weather)lobby_.weather, (TimeOfDay)lobby_.timeOfDay,
 			lobby_.driverIsHost ? Role::Driver : Role::Navigator, true);
 	}
 
@@ -269,6 +305,11 @@ namespace rally {
 			y += h + g;
 			changed |= ui::choice({ x, y, w, h }, "Weather", lobby_.weather, weatherNames()); y += h + g;
 			changed |= ui::choice({ x, y, w, h }, "Time of day", lobby_.timeOfDay, timeNames()); y += h + g;
+			{
+				int mode = lobby_.rally ? 1 : 0;
+				if (ui::choice({ x, y, w, h }, "Mode", mode, { "Single stage", "Full rally (" + std::to_string(stageDefs_.size()) + " stages)" })) { lobby_.rally = mode == 1; changed = true; }
+				y += h + g;
+			}
 			if (ui::button({ x, y, w, h }, "Swap Driver / Navigator")) { lobby_.driverIsHost = !lobby_.driverIsHost; changed = true; }
 			y += h + g;
 			if (changed) { lobby_.hostReady = false; lobby_.clientReady = false; lobbyChanged(); }
@@ -282,7 +323,8 @@ namespace rally {
 			line("Stage", lobby_.stage < (int)stages.size() ? stages[lobby_.stage] : "?");
 			line("Car", lobby_.car < (int)carNames.size() ? carNames[lobby_.car] : "?");
 			line("Weather", weatherNames()[std::clamp(lobby_.weather, 0, 2)]);
-			line("Time of day", timeNames()[std::clamp(lobby_.timeOfDay, 0, 1)]);
+			line("Time of day", timeNames()[std::clamp(lobby_.timeOfDay, 0, 2)]);
+			line("Mode", lobby_.rally ? "Full rally" : "Single stage");
 			ui::text("The host picks the stage, car and roles.", x + 16 * s, y + 8 * s, 20 * s, ui::kTextDim);
 			y += h + g;
 		}
@@ -326,6 +368,7 @@ namespace rally {
 		float s = ui::s();
 		int H = GetScreenHeight();
 		float x = 70 * s, y = H * 0.06f, w = 760 * s, h = 46 * s, g = 8 * s;
+		DrawRectangle(0, 0, GetScreenWidth(), H, Color{ 10, 11, 14, 190 });
 		ui::text("SETTINGS", x, y, 64 * s, ui::kAccent, ui::Left, true);
 		y += 86 * s;
 		const char* tabs[] = { "Graphics", "Audio", "Controls", "Gameplay" };
@@ -366,17 +409,20 @@ namespace rally {
 				if (rebindKind_ == 3) {
 					AxisBinding b;
 					if (input::pollAxisCapture(b)) {
-						AxisBinding* target = rebindAxis_ == 0 ? &cfg.steerAxis : rebindAxis_ == 1 ? &cfg.throttleAxis : &cfg.brakeAxis;
+						AxisBinding* target = rebindAxis_ == 0 ? &cfg.steerAxis : rebindAxis_ == 1 ? &cfg.throttleAxis : rebindAxis_ == 2 ? &cfg.brakeAxis : &cfg.clutchAxis;
 						*target = b;
 						rebindAction_ = -1;
 					}
 					if (IsKeyPressed(KEY_ESCAPE)) rebindAction_ = -1;
 				}
 				else if (rebindKind_ == 2) {
+					// Gamepad button (raylib) or any wheel/shifter button (DirectInput).
 					int b = input::pollAnyPadButton();
-					if (b > 0) { cfg.pad[rebindAction_] = b; rebindAction_ = -1; }
-					if (IsKeyPressed(KEY_ESCAPE)) rebindAction_ = -1;
-					if (IsKeyPressed(KEY_DELETE)) { cfg.pad[rebindAction_] = 0; rebindAction_ = -1; }
+					int jb = input::pollAnyJoyButton();
+					if (b > 0) { cfg.pad[rebindAction_] = b; cfg.joy[rebindAction_] = 0; rebindAction_ = -1; }
+					else if (jb > 0) { cfg.joy[rebindAction_] = jb; cfg.pad[rebindAction_] = 0; rebindAction_ = -1; }
+					else if (IsKeyPressed(KEY_DELETE)) { cfg.pad[rebindAction_] = 0; cfg.joy[rebindAction_] = 0; rebindAction_ = -1; }
+					else if (IsKeyPressed(KEY_ESCAPE)) rebindAction_ = -1;
 				}
 				else {
 					int k = input::pollAnyKey();
@@ -399,42 +445,54 @@ namespace rally {
 				for (int kind = 0; kind < 3; ++kind) {
 					Rectangle r = { c1 + kind * (cw + 6 * s), y, cw, rowH - 4 * s };
 					bool waiting = rebindAction_ == a && rebindKind_ == kind;
-					std::string label = waiting ? "press..." : kind == 0 ? keyName(cfg.keys[a]) : kind == 1 ? keyName(cfg.keysAlt[a]) : padName(cfg.pad[a]);
+					std::string label = waiting ? "press..." : kind == 0 ? keyName(cfg.keys[a]) : kind == 1 ? keyName(cfg.keysAlt[a]) : (cfg.joy[a] > 0 ? input::joyButtonName(cfg.joy[a]) : padName(cfg.pad[a]));
 					if (ui::button(r, label)) { rebindAction_ = a; rebindKind_ = kind; }
 				}
 				y += rowH;
 			}
-			y += 8 * s;
-			const char* axisLabels[] = { "Steering axis", "Throttle axis", "Brake axis" };
-			AxisBinding* axes[] = { &cfg.steerAxis, &cfg.throttleAxis, &cfg.brakeAxis };
-			for (int i = 0; i < 3; ++i) {
-				ui::text(axisLabels[i], x, y + 6 * s, 21 * s, ui::kText);
+			// --- Right column: gamepad / wheel ---
+			float x2 = x + w + 50 * s;
+			float w2 = std::min(w, GetScreenWidth() - x2 - 40 * s);
+			float y2 = H * 0.06f + 86 * s + h + 20 * s;
+			float c2 = x2 + w2 * 0.36f, cw2 = w2 * 0.2f;
+			std::string pad = IsGamepadAvailable(cfg.gamepadIndex) ? std::string("Gamepad: ") + GetGamepadName(cfg.gamepadIndex) : "Gamepad: none";
+			ui::text(pad, x2, y2, 20 * s, ui::kTextDim); y2 += 26 * s;
+			for (int d = 0; d < joy::deviceCount(); ++d) { ui::text("Dev" + std::to_string(d + 1) + ": " + joy::deviceName(d), x2, y2, 18 * s, ui::kTextDim); y2 += 22 * s; }
+			if (joy::deviceCount() == 0) { ui::text("No wheels / pedals / shifters found (plug in, then restart)", x2, y2, 18 * s, ui::kTextDim); y2 += 22 * s; }
+			y2 += 4 * s;
+			ui::choice({ x2, y2, w2, h * 0.85f }, "Controller slot", cfg.gamepadIndex, { "1", "2", "3", "4" }); y2 += h;
+			const char* axisLabels[] = { "Steering axis", "Throttle axis", "Brake axis", "Clutch axis" };
+			AxisBinding* axes[] = { &cfg.steerAxis, &cfg.throttleAxis, &cfg.brakeAxis, &cfg.clutchAxis };
+			for (int i = 0; i < 4; ++i) {
+				ui::text(axisLabels[i], x2, y2 + 6 * s, 21 * s, ui::kText);
 				bool waiting = rebindAction_ == 100 + i;
-				if (ui::button({ c1, y, cw * 1.4f, rowH - 4 * s }, waiting ? "move it..." : axisName(*axes[i]))) {
+				if (ui::button({ c2, y2, cw2 * 1.4f, rowH - 4 * s }, waiting ? "move it..." : axisName(*axes[i]))) {
 					rebindAction_ = 100 + i; rebindKind_ = 3; rebindAxis_ = i; input::beginAxisCapture();
 				}
-				if (ui::button({ c1 + cw * 1.5f, y, cw * 0.7f, rowH - 4 * s }, "Invert")) axes[i]->invert = !axes[i]->invert;
-				if (ui::button({ c1 + cw * 2.3f, y, cw * 0.7f, rowH - 4 * s }, axes[i]->mode == 0 ? "Centered" : "Pedal")) axes[i]->mode = axes[i]->mode == 0 ? 1 : 0;
-				y += rowH;
+				if (ui::button({ c2 + cw2 * 1.5f, y2, cw2 * 0.7f, rowH - 4 * s }, axes[i]->invert ? "Inverted" : "Invert")) axes[i]->invert = !axes[i]->invert;
+				if (ui::button({ c2 + cw2 * 2.3f, y2, cw2 * 0.85f, rowH - 4 * s }, axes[i]->mode == 0 ? "Centered" : "Pedal")) axes[i]->mode = axes[i]->mode == 0 ? 1 : 0;
+				y2 += rowH;
 			}
-			y += 6 * s;
-			ui::slider({ x, y, w, h * 0.85f }, "Steering deadzone", cfg.steerDeadzone, 0, 0.3f); y += h;
-			ui::slider({ x, y, w, h * 0.85f }, "Steering linearity", cfg.steerLinearity, 1, 2.5f, "%.2f", 1.0f); y += h;
-			ui::slider({ x, y, w, h * 0.85f }, "Keyboard steering speed", cfg.keyboardSteerSpeed, 1, 8, "%.1f", 1.0f); y += h;
-			if (ui::button({ x, y, w * 0.45f, h * 0.85f }, "Reset controls")) cfg.resetControls();
-			std::string pad = IsGamepadAvailable(cfg.gamepadIndex) ? std::string("Device: ") + GetGamepadName(cfg.gamepadIndex) : "No gamepad / wheel detected";
-			ui::text(pad, x + w * 0.5f, y + 10 * s, 18 * s, ui::kTextDim);
-			y += h;
+			y2 += 6 * s;
+			ui::slider({ x2, y2, w2, h * 0.85f }, "Steering deadzone", cfg.steerDeadzone, 0, 0.3f); y2 += h;
+			ui::slider({ x2, y2, w2, h * 0.85f }, "Steering linearity", cfg.steerLinearity, 1, 2.5f, "%.2f", 1.0f); y2 += h;
+			ui::slider({ x2, y2, w2, h * 0.85f }, "Keyboard steering speed", cfg.keyboardSteerSpeed, 1, 8, "%.1f", 1.0f); y2 += h + 8 * s;
+			ui::text(ffb::wheelAvailable() ? std::string("Force feedback: ") + ffb::wheelName() : "Force feedback: no FFB wheel found", x2, y2, 20 * s, ffb::wheelAvailable() ? ui::kGood : ui::kTextDim);
+			y2 += 30 * s;
+			ui::slider({ x2, y2, w2, h * 0.85f }, "Force feedback strength", cfg.ffbStrength, 0, 1); y2 += h;
+			ui::toggle({ x2, y2, w2, h * 0.85f }, "Invert force feedback", cfg.ffbInvert); y2 += h;
+			ui::toggle({ x2, y2, w2, h * 0.85f }, "Gamepad rumble", cfg.rumble); y2 += h;
+			if (ui::button({ x2, y2, w2 * 0.45f, h * 0.85f }, "Reset controls")) cfg.resetControls();
 			break;
 		}
 		case 3: {
 			ui::textField({ x, y, w, h }, "Player name", cfg.playerName, 20); y += h + g;
 			ui::toggle({ x, y, w, h }, "Show speed in mph", cfg.useMph); y += h + g;
-			ui::toggle({ x, y, w, h }, "Manual gearbox", cfg.manualGearbox); y += h + g;
+			ui::choice({ x, y, w, h }, "Transmission", cfg.transmission, { "Automatic", "Sequential (Q/E)", "H-pattern + clutch" }); y += h + g;
 			ui::toggle({ x, y, w, h }, "ABS", cfg.abs); y += h + g;
 			ui::toggle({ x, y, w, h }, "Traction control", cfg.tcs); y += h + g;
 			ui::toggle({ x, y, w, h }, "Anti-flip assist", cfg.antiFlip); y += h + g;
-			ui::toggle({ x, y, w, h }, "Pace-note voice (off = use real voice chat)", cfg.aiCodriverVoice); y += h + g;
+			ui::toggle({ x, y, w, h }, "AI co-driver voice", cfg.aiCodriverVoice); y += h + g;
 			ui::choice({ x, y, w, h }, "Default camera", cfg.defaultCamera, { "Chase", "Near chase", "Bonnet", "Cockpit" }); y += h + g;
 			break;
 		}
@@ -444,7 +502,7 @@ namespace rally {
 		float by = H - 100 * s;
 		if (ui::button({ x, by, 300 * s, 60 * s }, "Save & Back") || (ui::back() && rebindAction_ < 0)) {
 			cfg.save(kSettingsPath);
-			car_.manualGearbox = cfg.manualGearbox;
+			cfg.manualGearbox = cfg.transmission != 0;
 			openScreen(settingsReturn_ == Screen::Stage ? Screen::MainMenu : settingsReturn_);
 		}
 	}
@@ -457,10 +515,12 @@ namespace rally {
 		y += 100 * s;
 		std::vector<std::string> stages;
 		for (auto& d : stageDefs_) stages.push_back(d.name);
+		stages.push_back("Full Rally (all stages)");
 		ui::choice({ x, y, w * 0.6f, 54 * s }, "Stage", boardStage_, stages);
 		y += 74 * s;
 		if (!stageDefs_.empty()) {
-			const auto& top = leaderboard_.top(stageDefs_[std::clamp(boardStage_, 0, (int)stageDefs_.size() - 1)].id);
+			bool rallyBoard = boardStage_ >= (int)stageDefs_.size();
+			const auto& top = leaderboard_.top(rallyBoard ? std::string("rally_all") : stageDefs_[std::clamp(boardStage_, 0, (int)stageDefs_.size() - 1)].id);
 			float cols[] = { 0, 60, 230, 430, 630, 860 };
 			const char* heads[] = { "#", "Time", "Driver", "Navigator", "Car", "Date" };
 			for (int i = 0; i < 6; ++i) ui::text(heads[i], x + cols[i] * s, y, 22 * s, ui::kTextDim);
@@ -480,5 +540,93 @@ namespace rally {
 			ui::text("* includes penalties", x, H - 160 * s, 20 * s, ui::kTextDim);
 		}
 		if (ui::button({ x, H - 110 * s, 300 * s, 60 * s }, "Back") || ui::back()) openScreen(Screen::MainMenu);
+	}
+
+	// ------------------------------------------------------------------
+	void Game::screenHowToPlay() {
+		float s = ui::s();
+		int W = GetScreenWidth(), H = GetScreenHeight();
+		DrawRectangle(0, 0, W, H, Color{ 10, 11, 14, 200 });
+		float x = 70 * s, y = 40 * s;
+		ui::text("HOW TO PLAY", x, y, 64 * s, ui::kAccent, ui::Left, true);
+		y += 84 * s;
+		float colW = W * 0.5f - 90 * s;
+		float lx = x, rx = W * 0.5f + 20 * s;
+		float ly = y, ry = y;
+		auto head = [&](float cx, float& cy, const char* t) { ui::text(t, cx, cy, 30 * s, ui::kAccent); cy += 40 * s; };
+		auto line = [&](float cx, float& cy, const std::string& t, Color c = ui::kText) { ui::text(t, cx, cy, 22 * s, c); cy += 30 * s; };
+		(void)colW;
+
+		head(lx, ly, "ONE DRIVES, ONE NAVIGATES");
+		line(lx, ly, "The navigator has the pace notes and the map.", ui::kTextDim);
+		line(lx, ly, "The driver only sees the notes the navigator calls.", ui::kTextDim);
+		line(lx, ly, "Talk to each other - or use the built-in co-driver voice.", ui::kTextDim);
+		ly += 12 * s;
+		head(lx, ly, "DRIVER");
+		line(lx, ly, "W / S  throttle, brake & reverse     A / D  steer");
+		line(lx, ly, "Space  handbrake     R  reset to road (+5 s)");
+		line(lx, ly, "C  camera     B  look back     Esc  pause");
+		line(lx, ly, "Gamepad / wheel: triggers or pedals, stick or wheel.");
+		line(lx, ly, "H-pattern: hold Shift (clutch) + 1-6, 0 = R, N = neutral, I = start");
+		ly += 12 * s;
+		head(lx, ly, "NAVIGATOR");
+		line(lx, ly, "Space (or A button, or click)  call the next note");
+		line(lx, ly, "Tab  switch view: seat / chase / map / pace book");
+		line(lx, ly, "Call a note 2-6 seconds before the corner:");
+		line(lx, ly, "the list shows  wait  /  CALL NOW  /  LATE!");
+		line(lx, ly, "Split times and deltas are yours to tell the driver.");
+
+		head(rx, ry, "READING PACE NOTES");
+		PaceNote ex[4];
+		ex[0].direction = -1; ex[0].severity = 4;
+		ex[1].direction = 1; ex[1].severity = 2; ex[1].mods = MOD_TIGHTENS; ex[1].link = "into";
+		ex[2].direction = -1; ex[2].severity = 0; ex[2].mods = MOD_DONTCUT;
+		ex[3].type = NoteType::Crest; ex[3].link = "100";
+		for (int i = 0; i < 4; ++i) {
+			Rectangle r = { rx, ry + i * 74 * s, 120 * s, 68 * s };
+			drawNoteIcon(ex[i], r, 1.0f, false);
+			ui::text(noteText(ex[i]), r.x + r.width + 16 * s, r.y + 22 * s, 24 * s, ui::kText);
+		}
+		ry += 4 * 74 * s + 10 * s;
+		line(rx, ry, "Numbers: 1 = slowest ... 6 = nearly flat out.");
+		line(rx, ry, "Hairpin and square = slower than a 1.");
+		line(rx, ry, "tightens / opens: the corner gets sharper / wider.");
+		line(rx, ry, "don't cut: rocks on the inside.   caution: danger.");
+		line(rx, ry, "Links: into = straight after, and = close, 50/70/100 = metres.");
+		ry += 12 * s;
+		head(rx, ry, "RULES");
+		line(rx, ry, "Reset or roll over: +5 s.   Cut a corner: +2 s.");
+		line(rx, ry, "Rally mode: every stage back to back, times added up.");
+
+		if (ui::button({ x, H - 100 * s, 340 * s, 62 * s }, firstRun_ ? "Let's go!" : "Back") || ui::back()) {
+			firstRun_ = false;
+			settings().save(kSettingsPath);
+			openScreen(Screen::MainMenu);
+		}
+	}
+
+	void Game::screenCredits() {
+		float s = ui::s();
+		int W = GetScreenWidth(), H = GetScreenHeight();
+		DrawRectangle(0, 0, W, H, Color{ 10, 11, 14, 170 });
+		float x = 90 * s, y = 60 * s;
+		ui::text("CREDITS", x, y, 64 * s, ui::kAccent, ui::Left, true);
+		y += 100 * s;
+		auto item = [&](const char* a, const char* b) {
+			ui::text(a, x, y, 26 * s, ui::kText);
+			ui::text(b, x + 20 * s, y + 32 * s, 21 * s, ui::kTextDim);
+			y += 74 * s;
+		};
+		item("2Fast2Rally", "Christian Larsen - game design, logo and the Prairie engine it is built on.");
+		item("Prairie engine", "Rigid-body physics, ENet networking, tree/rock/grass models and textures, menu music.");
+		item("raylib 6.0", "Ramon Santamaria and contributors - zlib license.");
+		item("ENet", "Lee Salzman - MIT license.");
+		item("JSON for Modern C++", "Niels Lohmann - MIT license.");
+		item("Cherry Bomb One font", "Satsuyako - SIL Open Font License.");
+		item("Co-driver voice", "Generated with Windows text-to-speech (tools/genvoice.ps1).");
+		item("Engine, surface and weather sounds", "Synthesised in real time - no samples.");
+		ui::text(std::string("Version ") + RALLY_VERSION, x, H - 150 * s, 22 * s, ui::kTextDim);
+		if (ui::button({ x, H - 110 * s, 300 * s, 60 * s }, "Back") || ui::back()) openScreen(Screen::MainMenu);
+		(void)W;
 	}
 }

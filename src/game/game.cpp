@@ -3,6 +3,7 @@
 #include "core/input.h"
 #include "core/ui.h"
 #include "core/log.h"
+#include "core/forceFeedback.h"
 #include <raymath.h>
 #include <rlgl.h>
 #include <filesystem>
@@ -13,8 +14,10 @@ namespace rally {
 	bool Game::init(const AutoOptions& opts) {
 		auto_ = opts;
 		Settings& cfg = settings();
-		cfg.load(kSettingsPath);
-		if (auto_.selfTest || auto_.menuShot || auto_.netHost || auto_.netJoin) {
+		firstRun_ = !cfg.load(kSettingsPath);
+		bool automated = auto_.selfTest || auto_.menuShot || auto_.netHost || auto_.netJoin || auto_.screens;
+		if (automated) {
+			firstRun_ = false;
 			cfg.fullscreen = false;
 			cfg.windowW = 1280; cfg.windowH = 720;
 		}
@@ -26,6 +29,10 @@ namespace rally {
 		InitWindow(cfg.windowW, cfg.windowH, "2Fast2Rally");
 		if (!IsWindowReady()) { log::error("window creation failed"); return false; }
 		SetExitKey(KEY_NULL);
+		{
+			Image icon = LoadImage("res/icon.png");
+			if (icon.data) { ImageFormat(&icon, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8); SetWindowIcon(icon); UnloadImage(icon); }
+		}
 		SetWindowMinSize(960, 540);
 		if (cfg.fullscreen) {
 			int m = GetCurrentMonitor();
@@ -35,9 +42,15 @@ namespace rally {
 		if (!cfg.vsync) SetTargetFPS(240);
 		rlSetClipPlanes(0.08, 5000.0);
 
+		ffb::init(GetWindowHandle());
 		InitAudioDevice();
 		SetMasterVolume(cfg.masterVolume);
 		ui::init();
+		if (FileExists("res/logo.png")) {
+			logo_ = LoadTexture("res/logo.png");
+			GenTextureMipmaps(&logo_);
+			SetTextureFilter(logo_, TEXTURE_FILTER_TRILINEAR);
+		}
 		if (!world_.init()) return false;
 		synth::init();
 		synth::setPaused(true);
@@ -76,7 +89,9 @@ namespace rally {
 		weather_ = (Weather)std::clamp(auto_.weather, 0, 2);
 		timeOfDay_ = (TimeOfDay)std::clamp(auto_.timeOfDay, 0, 1);
 
+		if (firstRun_) openScreen(Screen::HowToPlay);
 		if (auto_.selfTest) {
+			if (auto_.rally) { rally_ = RallyState{}; rally_.active = true; rally_.count = (int)stageDefs_.size(); stageIndex_ = 0; }
 			startStage(stageIndex_, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
 			run_.aiDriver = true;
 		}
@@ -117,7 +132,9 @@ namespace rally {
 		endStage();
 		session_.stop();
 		settings().save(kSettingsPath);
+		ffb::shutdown();
 		menuCarRender_.unload();
+		if (logo_.id) UnloadTexture(logo_);
 		carRender_.unload();
 		if (musicLoaded_) UnloadMusicStream(menuMusic_);
 		voice_.unload();
@@ -176,7 +193,7 @@ namespace rally {
 		}
 		voice_.setVolume(cfg.voiceVolume);
 		voice_.update(dt);
-		if (!inStage) synth::setPaused(true);
+		if (!inStage) { synth::setPaused(true); ffb::stopAll(); }
 		if (IsKeyPressed(KEY_F11)) { cfg.fullscreen = !cfg.fullscreen; applyVideoSettings(); }
 
 		BeginDrawing();
@@ -195,6 +212,8 @@ namespace rally {
 			case Screen::Lobby: screenLobby(); break;
 			case Screen::Settings: screenSettings(); break;
 			case Screen::Leaderboard: screenLeaderboard(); break;
+			case Screen::HowToPlay: screenHowToPlay(); break;
+			case Screen::Credits: screenCredits(); break;
 			default: break;
 			}
 			break;
@@ -203,6 +222,29 @@ namespace rally {
 
 		// --- Automation ---
 		autoTimer_ += dt;
+		if (!pendingShot_.empty()) { takeScreenshot(pendingShot_); pendingShot_.clear(); }
+		if (auto_.screens) {
+			// QA: visit every menu screen and screenshot it.
+			static const char* names[] = { "main", "solo", "host", "join", "lobby", "set_gfx", "set_audio", "set_controls", "set_game", "board", "howto", "credits", "editor" };
+			const int steps = 13;
+			qaTimer_ += dt;
+			if (qaTimer_ > 0.9f) {
+				takeScreenshot("qa_" + std::to_string(qaStep_) + "_" + names[qaStep_] + ".png");
+				qaTimer_ = 0;
+				if (++qaStep_ >= steps) quit_ = true;
+				else switch (qaStep_) {
+				case 1: openScreen(Screen::SoloSetup); break;
+				case 2: openScreen(Screen::HostMenu); break;
+				case 3: openScreen(Screen::JoinMenu); break;
+				case 4: lobby_ = LobbyState{}; lobby_.hostName = "Host"; lobby_.clientName = "Partner"; lobby_.clientConnected = true; lobby_.clientReady = true; openScreen(Screen::Lobby); break;
+				case 5: case 6: case 7: case 8: settingsTab_ = qaStep_ - 5; openScreen(Screen::Settings); break;
+				case 9: openScreen(Screen::Leaderboard); break;
+				case 10: openScreen(Screen::HowToPlay); break;
+				case 11: openScreen(Screen::Credits); break;
+				case 12: editorOpen(0); break;
+				}
+			}
+		}
 		if (screen_ == Screen::Stage && run_.phase == RunPhase::Running) {
 			fpsFrames_ += 1; fpsTime_ += GetFrameTime();
 			float inst = 1.0f / std::max(1e-4f, GetFrameTime());
@@ -227,8 +269,18 @@ namespace rally {
 				log::info("selftest: t=%.1f phase=%d s=%.0f/%.0f lat=%.1f speed=%.1f km/h gear=%d rpm=%.0f resets=%d pos=(%.0f,%.1f,%.0f) up=%.2f",
 					run_.stageTime, (int)run_.phase, run_.progress, stage_.finishS, run_.lateral, car_.speed() * 3.6f, car_.gear(), car_.rpm(), run_.resets, p.x, p.y, p.z, car_.up().y);
 			}
-			if ((run_.phase == RunPhase::Finished && run_.finishedFor > 3.0f) || autoTimer_ > auto_.timeLimit) {
+			if (run_.phase == RunPhase::Finished && run_.finishedFor > 3.0f && rally_.active && rally_.index + 1 < rally_.count) {
+				log::info("selftest: rally stage %d done time=%.2f total=%.2f resets=%d", rally_.index + 1, run_.finishTime, rally_.total, run_.resets);
+				rally_.index++;
+				autoShots_ = 0;
+				autoTimer_ = 0;
+				startStage(rally_.index, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
+				run_.aiDriver = true;
+			}
+			else if ((run_.phase == RunPhase::Finished && run_.finishedFor > 3.0f) || autoTimer_ > auto_.timeLimit) {
 				if (run_.phase == RunPhase::Finished) takeScreenshot(auto_.shotPrefix + "_results.png");
+				if (rally_.active) log::info("selftest: rally done stages=%d total=%.2f", (int)rally_.stageTimes.size(), rally_.total);
+				if (auto_.hTest) log::info("selftest: htest shifts=%d stalls=%d", hTestShifts_, hTestStalls_);
 				log::info("selftest: done finished=%d time=%.2f penalties=%.0f resets=%d cuts=%d notes=%d good=%d avgFps=%.0f minFps=%.0f",
 					run_.phase == RunPhase::Finished ? 1 : 0, run_.finishTime, run_.penalties, run_.resets, run_.cuts, (int)notes_.size(), run_.goodCalls,
 					fpsFrames_ / std::max(0.001, fpsTime_), fpsMin_);
@@ -276,7 +328,8 @@ namespace rally {
 				if (screen_ == Screen::Stage && run_.online) {
 					// Partner rejoined mid-stage: send them straight back in.
 					nlohmann::json j = { {"stage", stageIndex_}, {"car", carIndex_}, {"weather", (int)weather_},
-						{"timeOfDay", (int)timeOfDay_}, {"driverIsHost", lobby_.driverIsHost} };
+						{"timeOfDay", (int)timeOfDay_}, {"driverIsHost", lobby_.driverIsHost},
+						{"rally", rally_.active}, {"rallyIndex", rally_.index}, {"rallyCount", rally_.count}, {"rallyTotal", rally_.total} };
 					const CarVisual& v = displayCar();
 					j["resume"] = { {"time", run_.stageTime}, {"progress", run_.progress}, {"penalties", run_.penalties},
 						{"resets", run_.resets}, {"splitIndex", run_.splitIndex}, {"split0", run_.splitTimes[0]}, {"split1", run_.splitTimes[1]},
@@ -336,6 +389,14 @@ namespace rally {
 				bool driverIsHost = j.value("driverIsHost", true);
 				lobby_.driverIsHost = driverIsHost;
 				const nlohmann::json* resume = j.contains("resume") ? &j["resume"] : nullptr;
+				rally_ = RallyState{};
+				rally_.active = j.value("rally", false);
+				if (rally_.active) {
+					rally_.index = j.value("rallyIndex", 0);
+					rally_.count = j.value("rallyCount", 1);
+					rally_.total = j.value("rallyTotal", 0.0);
+					rally_.stageTimes.assign(rally_.index, 0.0);
+				}
 				startStage(j.value("stage", 0), j.value("car", 0), (Weather)j.value("weather", 0), (TimeOfDay)j.value("timeOfDay", 0),
 					driverIsHost ? Role::Navigator : Role::Driver, true, resume);
 			}

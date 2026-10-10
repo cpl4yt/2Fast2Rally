@@ -18,7 +18,7 @@
 #include "game/leaderboard.h"
 
 namespace rally {
-	enum class Screen { MainMenu, SoloSetup, HostMenu, JoinMenu, Lobby, Settings, Leaderboard, Stage, Editor };
+	enum class Screen { MainMenu, SoloSetup, HostMenu, JoinMenu, Lobby, Settings, Leaderboard, Stage, Editor, HowToPlay, Credits };
 	enum class Role : uint8_t { Driver, Navigator };
 	enum class RunPhase : uint8_t { Loading, WaitingPartner, Countdown, Running, Finished };
 
@@ -35,6 +35,9 @@ namespace rally {
 		bool genStages = false;
 		int navView = -1;             // force a navigator view (for screenshots)
 		bool asNavigator = false;     // self test as the navigator (AI driver)
+		bool screens = false;         // screenshot every menu screen and exit
+		bool rally = false;           // self test: run the full rally
+		bool hTest = false;           // self test: scripted H-pattern + clutch driver
 	};
 
 	struct NoteCallState {
@@ -126,6 +129,7 @@ namespace rally {
 		void finishRun();
 		void updateCamera(float dt);
 		void updateAudio(float dt);
+		void updateForceFeedback(float dt);
 		void sendCarState();
 		void receiveCarState(const CarStatePacket& p);
 		const CarVisual& displayCar() const;
@@ -172,6 +176,7 @@ namespace rally {
 		Session session_;
 		Leaderboard leaderboard_;
 		Music menuMusic_{};
+		Texture2D logo_{};          // res/logo.png, replaces the text title if present
 		bool musicLoaded_ = false;
 
 		std::vector<CarSpec> cars_;
@@ -180,6 +185,24 @@ namespace rally {
 		std::vector<PaceNote> notes_;
 
 		RunState run_;
+
+		// Rally mode: every stage back to back, times added up.
+		struct RallyState {
+			bool active = false;
+			int index = 0;              // current stage (0-based position in the rally)
+			int count = 0;
+			double total = 0;
+			std::vector<double> stageTimes;
+			bool recorded = false;
+		} rally_;
+		bool soloRally_ = false;
+		void rallyRecordStage();
+		void screenHowToPlay();
+		void screenCredits();
+		std::string pendingShot_;
+		bool firstRun_ = false;
+		int qaStep_ = 0;
+		float qaTimer_ = 0;
 		int stageIndex_ = 0, carIndex_ = 0;
 		Weather weather_ = Weather::Clear;
 		TimeOfDay timeOfDay_ = TimeOfDay::Day;
@@ -244,11 +267,19 @@ namespace rally {
 			Stage preview;          // samples only (no meshes) for notes/length
 			std::string status;
 			float statusTimer = 0;
+			float closest = 1e9f;   // closest approach of the road to itself
 		} ed_;
 
 		// Self test bookkeeping
 		double fpsFrames_ = 0, fpsTime_ = 0, fpsMin_ = 1e9;
 		float aiStuckTimer_ = 0;
+		bool edgesConsumed_ = false;
+		float aiReverse_ = 0, aiSlowTimer_ = 0;
+		float ffbKick_ = 0, ffbNoise_ = 0;
+		int hTestState_ = 0, hTestTarget_ = 1, hTestShifts_ = 0, hTestStalls_ = 0;
+		float hTestTimer_ = 0;
+		uint16_t ffbSeenImpact_ = 0;
+		bool stuckShotTaken_ = false;
 		float aiLastStuckS_ = -1000;
 		int resetShots_ = 0;
 		float autoTimer_ = 0;

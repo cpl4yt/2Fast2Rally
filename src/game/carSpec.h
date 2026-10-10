@@ -53,6 +53,9 @@ namespace rally {
 		float drivetrainEfficiency = 0.85f;
 		float shiftTime = 0.14f;
 		float engineBraking = 0.12f;
+		float engineInertia = 0.25f;      // kg m^2, flywheel + crank
+		float stallRpm = 420.0f;
+		float clutchTorqueScale = 1.6f;   // clutch capacity vs. peak engine torque
 
 		// Brakes / steering
 		float brakeForce = 11000.0f;      // total, N
@@ -75,6 +78,7 @@ namespace rally {
 		int style = 0;                    // 0 = hatch (modern), 1 = wedge coupe (classic)
 
 		float torqueAt(float rpm) const;
+		float maxTorque() const;
 	};
 
 	// Loads all cars from json; returns false (and keeps defaults) on failure.

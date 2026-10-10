@@ -70,8 +70,11 @@ namespace rally {
 		b->linearVelocity = { 0, 0, 0 };
 		b->angularVelocity = { 0, 0, 0 };
 		for (Wheel& w : wheels_) { w.compression = w.prevCompression = 0.0f; w.spinRate = 0; w.contact = false; }
-		gear_ = 1;
+		gear_ = transmission == 0 ? 1 : 0;
 		rpm_ = spec_.idleRpm;
+		engineOmega_ = spec_.idleRpm * (2.0f * PI / 60.0f);
+		engineRunning_ = true;
+		clutchEngage_ = transmission == 2 ? 1.0f : 0.0f;
 		shiftTimer_ = 0.0f;
 		boost_ = 0.0f;
 		steer_ = 0.0f;
@@ -100,12 +103,44 @@ namespace rally {
 		return n ? sum / n : 0.0f;
 	}
 
+	float Vehicle::drivenSpin() const {
+		float sum = 0; int n = 0;
+		for (int i = 0; i < 4; ++i) {
+			const Wheel& w = wheels_[i];
+			bool driven = spec_.drivetrain == Drivetrain::AWD || (spec_.drivetrain == Drivetrain::RWD ? !w.front : w.front);
+			if (!driven) continue;
+			sum += w.spinRate;
+			++n;
+		}
+		return n ? sum / n : 0.0f;
+	}
+
+	float Vehicle::gearRatioSigned() const {
+		int nG = (int)spec_.gears.size();
+		if (gear_ > 0) return spec_.gears[std::min(gear_, nG) - 1] * spec_.finalDrive;
+		if (gear_ < 0) return -spec_.reverseRatio * spec_.finalDrive;
+		return 0.0f;
+	}
+
 	void Vehicle::updateGearbox(float dt, const DriveInput& in, float fwdSpeed) {
 		int nG = (int)spec_.gears.size();
 		if (shiftTimer_ > 0.0f) shiftTimer_ -= dt;
+		if (grindCooldown_ > 0.0f) grindCooldown_ -= dt;
 		int before = gear_;
 
-		if (manualGearbox) {
+		if (transmission == 2) {
+			// H-pattern: the gear only goes in with the clutch pressed.
+			if (in.hGear != -2 && in.hGear != gear_) {
+				int want = std::clamp(in.hGear, -1, nG);
+				if (want == 0) gear_ = 0;
+				else if (clutchPedal_ > 0.7f || !engineRunning_) gear_ = want;
+				else {
+					if (grindCooldown_ <= 0.0f) { pendingGrind = true; grindCooldown_ = 0.35f; }
+					gear_ = 0;
+				}
+			}
+		}
+		else if (transmission == 1) {
 			if (in.shiftUp && gear_ < nG) ++gear_;
 			if (in.shiftDown && gear_ > -1) --gear_;
 		}
@@ -117,16 +152,21 @@ namespace rally {
 				}
 				else reverseHold_ = 0.0f;
 
-				if (shiftTimer_ <= 0.0f && gear_ >= 1) {
+				// Decide on gearbox input speed (what the wheels say), not engine
+				// revs - those flare while the clutch slips at launch.
+				float inputRpm = std::fabs(drivenSpin() * gearRatioSigned()) * kRadToRpm;
+				if (shiftTimer_ <= 0.0f && gear_ >= 1 && clutchEngage_ > 0.9f) {
 					bool slipping = false;
 					for (const Wheel& w : wheels_) if (w.spinning) slipping = true;
-					if (rpm_ > spec_.redline * 0.95f && gear_ < nG && throttle_ > 0.2f && !slipping) ++gear_;
+					if (inputRpm > spec_.redline * 0.95f && gear_ < nG && throttle_ > 0.2f && !slipping) ++gear_;
 					else if (gear_ > 1) {
 						float down = (throttle_ > 0.3f ? 0.56f : 0.40f) * spec_.redline;
-						float rpmBelow = rpm_ * spec_.gears[gear_ - 2] / spec_.gears[gear_ - 1];
-						if (rpm_ < down && rpmBelow < spec_.redline * 0.9f) --gear_;
+						float rpmBelow = inputRpm * spec_.gears[gear_ - 2] / spec_.gears[gear_ - 1];
+						if (inputRpm < down && rpmBelow < spec_.redline * 0.9f) --gear_;
 					}
 				}
+				// Coming to a stop in a high gear: drop straight back to first.
+				if (gear_ > 1 && std::fabs(fwdSpeed) < 2.0f && shiftTimer_ <= 0.0f) gear_ = 1;
 			}
 			else if (gear_ == -1) {
 				if (in.throttle > 0.5f && in.brake < 0.1f && fwdSpeed > -0.8f) {
@@ -138,9 +178,10 @@ namespace rally {
 			else gear_ = 1;
 		}
 
-		if (!engineEnabled && gear_ < 1 && !manualGearbox) gear_ = 1;
+		if (!engineEnabled && gear_ < 1 && transmission == 0) gear_ = 1;
 		if (gear_ != before) {
-			shiftTimer_ = spec_.shiftTime;
+			// Automatic/sequential: the auto-clutch is open for shiftTime.
+			shiftTimer_ = transmission == 2 ? 0.0f : spec_.shiftTime;
 			pendingShift = true;
 			if (gear_ > before && boost_ > 0.5f) pendingBlowOff = true;
 		}
@@ -163,9 +204,12 @@ namespace rally {
 		steerAngle_ = steer_ * spec_.maxSteerDeg * DEG2RAD * lockScale + steeringDamage * 0.06f;
 
 		// --- Gearbox & pedals ---
+		clutchPedal_ = in.clutch;
 		updateGearbox(dt, in, fwdSpeed);
-		float driveThrottle = gear_ < 0 ? in.brake : in.throttle;
-		float brakePedal = gear_ < 0 ? in.throttle : in.brake;
+		// The automatic box uses the brake pedal as "throttle" in reverse.
+		bool swapPedals = transmission == 0 && gear_ < 0;
+		float driveThrottle = swapPedals ? in.brake : in.throttle;
+		float brakePedal = swapPedals ? in.throttle : in.brake;
 		handbrake_ = in.handbrake;
 		brakeInput_ = brakePedal;
 
@@ -177,57 +221,89 @@ namespace rally {
 		prevThrottle_ = driveThrottle;
 		throttle_ = driveThrottle;
 
-		// --- Engine ---
-		int nG = (int)spec_.gears.size();
-		float ratio = gear_ > 0 ? spec_.gears[std::min(gear_, nG) - 1] : (gear_ < 0 ? spec_.reverseRatio : 0.0f);
-		float totalRatio = ratio * spec_.finalDrive;
+		// --- Engine, clutch, gearbox (torque based) ---
+		// The throttle only makes engine torque. Torque reaches the wheels
+		// through the clutch, which slips when asked for more than it can
+		// carry; whatever the tyres can't put down spins the engine up.
+		const float G = gearRatioSigned();
+		const float Ie = std::max(0.05f, spec_.engineInertia);
+		const float maxT = spec_.maxTorque();
+		const float idleW = spec_.idleRpm / kRadToRpm;
+		float omegaD = drivenSpin() * G;                 // gearbox input speed
 		bool shifting = shiftTimer_ > 0.0f;
-		bool anySpin = false;
-		for (const Wheel& w : wheels_) if (w.spinning) anySpin = true;
 
-		float rpmWheels = wheelRpm() * totalRatio * kRadToRpm;
-		float freeTarget = spec_.idleRpm + driveThrottle * (spec_.redline - spec_.idleRpm) * 1.04f;
-		if (gear_ == 0 || shifting || !engineEnabled) {
-			float rate = (freeTarget > rpm_) ? 7.0f : 3.0f;
-			float target = shifting ? std::max(rpmWheels, spec_.idleRpm) : freeTarget;
-			rpm_ += (target - rpm_) * std::min(1.0f, rate * dt);
-		}
+		// Clutch engagement: driver's pedal in H-pattern, automatic otherwise.
+		if (!engineEnabled) clutchEngage_ = 0.0f;
+		else if (transmission == 2) clutchEngage_ = 1.0f - std::clamp(clutchPedal_, 0.0f, 1.0f);
 		else {
-			// Auto clutch: slips at launch so the engine sits at a useful rpm.
-			float launchFloor = (std::abs(gear_) == 1) ? spec_.idleRpm * 0.9f + driveThrottle * 2400.0f : spec_.idleRpm * 0.9f;
-			float target = std::max(rpmWheels, launchFloor);
-			if (anySpin) target = std::max(target, rpm_ + (freeTarget - rpm_) * 5.0f * dt);
-			rpm_ += (target - rpm_) * std::min(1.0f, 16.0f * dt);
+			float target = 1.0f;
+			if (gear_ == 0 || shifting || !engineRunning_) target = 0.0f;
+			else if (std::fabs(omegaD) < idleW * 1.15f) {
+				// Launch / crawl: bite as the revs come up, keep a little creep.
+				float launchRpm = spec_.idleRpm + 500.0f + driveThrottle * 1900.0f;
+				float bite = std::clamp((rpm_ - spec_.idleRpm * 1.02f) / std::max(100.0f, launchRpm - spec_.idleRpm * 1.02f), 0.0f, 1.0f);
+				target = driveThrottle > 0.05f ? bite : std::min(bite, 0.3f);
+			}
+			if (rpm_ < spec_.idleRpm * 0.9f) target = std::min(target, 0.15f); // anti-stall
+			clutchEngage_ += (target - clutchEngage_) * std::min(1.0f, dt * (target > clutchEngage_ ? 6.0f : 25.0f));
 		}
-		rpm_ = std::clamp(rpm_, spec_.idleRpm * 0.8f, spec_.redline * 1.03f);
+
+		// Engine torque.
 		if (rpm_ >= spec_.redline) limiter_ = true;
 		else if (rpm_ < spec_.redline * 0.96f) limiter_ = false;
-
 		float boostTarget = spec_.turbo ? std::clamp((rpm_ - 2600.0f) / 2400.0f, 0.0f, 1.0f) * driveThrottle : 0.0f;
 		boost_ += (boostTarget - boost_) * std::min(1.0f, dt * (boostTarget > boost_ ? 1.6f : 4.0f));
+		float Te = 0.0f;
+		if (engineRunning_) {
+			if (!limiter_) {
+				Te = spec_.torqueAt(rpm_) * driveThrottle;
+				if (spec_.turbo) Te *= 0.62f + 0.38f * boost_;
+				Te *= 1.0f - 0.45f * engineDamage;
+			}
+			// Idle governor.
+			if (rpm_ < spec_.idleRpm * 1.02f && driveThrottle < 0.3f)
+				Te += maxT * 0.35f * std::clamp((spec_.idleRpm - rpm_) / 250.0f + 0.1f, 0.0f, 1.0f);
+		}
+		float Tf = engineOmega_ > 0.0f ? spec_.engineBraking * maxT * (rpm_ / spec_.redline) + 0.03f * maxT : 0.0f;
+		float Tnet = Te - Tf;
 
-		float torque = 0.0f;
-		if (driveThrottle > 0.05f) {
-			torque = limiter_ ? 0.0f : spec_.torqueAt(rpm_) * driveThrottle;
-			if (spec_.turbo) torque *= 0.62f + 0.38f * boost_;
-			torque *= 1.0f - 0.45f * engineDamage;
+		// Clutch torque: what it takes to bring the engine to the gearbox
+		// speed this step, limited by the clutch's capacity.
+		float Tcap = maxT * spec_.clutchTorqueScale * clutchEngage_;
+		float Tc = 0.0f;
+		if (G != 0.0f && Tcap > 0.0f) {
+			float Tsync = Tnet + Ie * (engineOmega_ - omegaD) / dt;
+			Tc = std::clamp(Tsync, -Tcap, Tcap);
 		}
-		else if (gear_ != 0) {
-			torque = -spec_.engineBraking * spec_.torqueAt(rpm_) * (rpm_ / spec_.redline);
-		}
-		float driveForce = torque * totalRatio * spec_.drivetrainEfficiency / spec_.wheelRadius;
-		if (gear_ < 0) driveForce = -driveForce;
-		if (gear_ == 0 || shifting || !engineEnabled) driveForce = 0.0f;
+		float driveForce = Tc * G * spec_.drivetrainEfficiency / spec_.wheelRadius;
 		tele_.driveForce = driveForce;
 
 		computeWheelForces(dt, in, ground, driveForce, brakePedal);
 
-		// Driven wheels that are spinning are tied to the engine.
+		// Torque the ground actually took; the rest spins the engine (and wheels) up.
+		float Tused = (G != 0.0f) ? driveUsed_ * spec_.wheelRadius / (G * spec_.drivetrainEfficiency) : 0.0f;
+		if (G != 0.0f && std::fabs(Tused) > std::fabs(Tc)) Tused = Tc;
+		engineOmega_ += (Tnet - Tused) / Ie * dt;
+		engineOmega_ = std::clamp(engineOmega_, 0.0f, spec_.redline * 1.05f / kRadToRpm);
+		rpm_ = engineOmega_ * kRadToRpm;
+
+		// Stalling (only possible with the driver working the clutch).
+		if (engineRunning_ && rpm_ < spec_.stallRpm) {
+			if (transmission == 2 && G != 0.0f && clutchEngage_ > 0.3f) { engineRunning_ = false; pendingStall = true; }
+			else if (rpm_ < spec_.stallRpm * 0.6f && transmission != 2 && engineEnabled) engineOmega_ = idleW; // auto modes recover
+		}
+		if (!engineRunning_ && in.ignition && (gear_ == 0 || clutchPedal_ > 0.7f)) {
+			engineRunning_ = true;
+			engineOmega_ = idleW;
+		}
+
+		// Driven wheels that are spinning (or in the air) turn with the engine
+		// while the clutch is closed.
 		for (int i = 0; i < 4; ++i) {
 			Wheel& w = wheels_[i];
 			bool driven = spec_.drivetrain == Drivetrain::AWD || (spec_.drivetrain == Drivetrain::RWD ? !w.front : w.front);
-			if (driven && (w.spinning || !w.contact) && gear_ != 0 && !shifting && totalRatio > 0.0f && engineEnabled) {
-				float engineRate = rpm_ / kRadToRpm / totalRatio * (gear_ < 0 ? -1.0f : 1.0f);
+			if (driven && (w.spinning || !w.contact) && G != 0.0f && clutchEngage_ > 0.5f) {
+				float engineRate = engineOmega_ / G;
 				if (!w.contact) w.spinRate += (engineRate - w.spinRate) * std::min(1.0f, 6.0f * dt);
 				else w.spinRate = engineRate;
 			}
@@ -314,6 +390,7 @@ namespace rally {
 		}
 
 		// Pass 2: tire forces.
+		driveUsed_ = 0.0f;
 		float frontSlip = 0, rearSlip = 0;
 		for (int i = 0; i < 4; ++i) {
 			Wheel& w = wheels_[i];
@@ -354,6 +431,7 @@ namespace rally {
 			}
 			bool hb = handbrake_ && !w.front;
 			float Fdrive = (hb && spec_.drivetrain != Drivetrain::FWD) ? 0.0f : driveForceTotal * share;
+			float FdriveRequested = Fdrive; // brake-based TCS absorbs the excess
 			if (tcsEnabled && Fdrive > 0.0f) {
 				// Traction control: keep drive inside what the tyre can take,
 				// leaving more for cornering the more the tyre is already sliding.
@@ -407,6 +485,13 @@ namespace rally {
 			Fy = std::clamp(Fy, -stopLimit, stopLimit);
 
 			w.longForce = Fx;
+			if (driven) {
+				// Drive the ground took: everything requested, unless the tyre is
+				// spinning, in which case only what grip allows.
+				float used = FdriveRequested;
+				if (w.spinning) used = signf(Fdrive) * std::min(std::fabs(Fdrive), maxF * 0.94f);
+				driveUsed_ += used;
+			}
 			w.latForce = Fy;
 
 			float h = dot(sub(pos, w.contactPoint), upV) * spec_.tireForceHeight;

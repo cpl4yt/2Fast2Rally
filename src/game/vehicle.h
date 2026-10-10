@@ -99,7 +99,10 @@ namespace rally {
 
 		bool upsideDown() const;
 		float timeUpsideDown = 0.0f;
-		bool manualGearbox = false;
+		int transmission = 0;           // 0 automatic, 1 sequential, 2 H-pattern + clutch
+		bool engineRunning() const { return engineRunning_; }
+		float clutchEngagement() const { return clutchEngage_; }
+		float clutchPedal() const { return clutchPedal_; }
 		bool absEnabled = true;
 		bool tcsEnabled = true;
 		bool antiFlip = true;
@@ -109,11 +112,15 @@ namespace rally {
 		int pendingBackfires = 0;
 		bool pendingShift = false;
 		bool pendingBlowOff = false;
+		bool pendingGrind = false;
+		bool pendingStall = false;
 
 	private:
 		void computeWheelForces(float dt, const DriveInput& in, const Ground& ground, float driveForceTotal, float brakeIn);
 		void updateGearbox(float dt, const DriveInput& in, float fwdSpeed);
 		float wheelRpm() const;
+		float drivenSpin() const;       // signed average driven-wheel spin (rad/s)
+		float gearRatioSigned() const;  // total ratio incl. final drive, negative in reverse
 
 		PhysicsEngine* physics_ = nullptr;
 		int body_ = -1;
@@ -136,6 +143,12 @@ namespace rally {
 		float spinAngle_[4]{};
 		bool handbrake_ = false;
 		float brakeInput_ = 0.0f;
+		float engineOmega_ = 0.0f;      // rad/s
+		bool engineRunning_ = true;
+		float clutchEngage_ = 1.0f;     // 0 open .. 1 closed
+		float clutchPedal_ = 0.0f;
+		float driveUsed_ = 0.0f;        // N actually delivered to the ground last tick
+		float grindCooldown_ = 0.0f;
 	};
 
 	// Quaternion helpers used across game code.

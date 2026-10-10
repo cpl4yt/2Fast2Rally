@@ -23,6 +23,16 @@ namespace rally {
 		case Action::NavView: return "Navigator View (Nav)";
 		case Action::LookBack: return "Look Back";
 		case Action::Debug: return "Debug Overlay";
+		case Action::Clutch: return "Clutch (key)";
+		case Action::Gear1: return "Gear 1 (H-shifter)";
+		case Action::Gear2: return "Gear 2";
+		case Action::Gear3: return "Gear 3";
+		case Action::Gear4: return "Gear 4";
+		case Action::Gear5: return "Gear 5";
+		case Action::Gear6: return "Gear 6";
+		case Action::GearReverse: return "Reverse gear";
+		case Action::GearNeutral: return "Neutral";
+		case Action::Ignition: return "Ignition / start engine";
 		default: return "?";
 		}
 	}
@@ -31,7 +41,7 @@ namespace rally {
 
 	void Settings::resetControls() {
 		auto set = [&](Action a, int k, int alt, int p) {
-			keys[(int)a] = k; keysAlt[(int)a] = alt; pad[(int)a] = p;
+			keys[(int)a] = k; keysAlt[(int)a] = alt; pad[(int)a] = p; joy[(int)a] = 0;
 		};
 		set(Action::Throttle, KEY_W, KEY_UP, 0);
 		set(Action::Brake, KEY_S, KEY_DOWN, 0);
@@ -47,13 +57,20 @@ namespace rally {
 		set(Action::NavView, KEY_TAB, 0, GAMEPAD_BUTTON_RIGHT_FACE_RIGHT);
 		set(Action::LookBack, KEY_B, 0, GAMEPAD_BUTTON_RIGHT_THUMB);
 		set(Action::Debug, KEY_F3, 0, 0);
-		steerAxis = { GAMEPAD_AXIS_LEFT_X, false, 0 };
-		throttleAxis = { GAMEPAD_AXIS_RIGHT_TRIGGER, false, 1 };
-		brakeAxis = { GAMEPAD_AXIS_LEFT_TRIGGER, false, 1 };
+		set(Action::Clutch, KEY_LEFT_SHIFT, 0, 0);
+		set(Action::Gear1, KEY_ONE, 0, 0); set(Action::Gear2, KEY_TWO, 0, 0); set(Action::Gear3, KEY_THREE, 0, 0);
+		set(Action::Gear4, KEY_FOUR, 0, 0); set(Action::Gear5, KEY_FIVE, 0, 0); set(Action::Gear6, KEY_SIX, 0, 0);
+		set(Action::GearReverse, KEY_ZERO, 0, 0);
+		set(Action::GearNeutral, KEY_N, 0, 0);
+		set(Action::Ignition, KEY_I, 0, 0);
+		steerAxis = { GAMEPAD_AXIS_LEFT_X, false, 0, -1 };
+		throttleAxis = { GAMEPAD_AXIS_RIGHT_TRIGGER, false, 1, -1 };
+		brakeAxis = { GAMEPAD_AXIS_LEFT_TRIGGER, false, 1, -1 };
+		clutchAxis = { -1, false, 1, -1 };
 	}
 
 	static nlohmann::json axisToJson(const AxisBinding& a) {
-		return { {"axis", a.axis}, {"invert", a.invert}, {"mode", a.mode} };
+		return { {"axis", a.axis}, {"invert", a.invert}, {"mode", a.mode}, {"device", a.device} };
 	}
 	static void axisFromJson(const nlohmann::json& j, AxisBinding& a) {
 		if (!j.is_object()) return;
@@ -75,7 +92,7 @@ namespace rally {
 			drawDistance = j.value("drawDistance", drawDistance);
 			particleQuality = j.value("particleQuality", particleQuality);
 			showFps = j.value("showFps", showFps);
-			msaa = j.value("msaa", msaa);
+			if (j.contains("msaa")) msaa = j["msaa"].is_boolean() ? j["msaa"].get<bool>() : (j["msaa"].is_number() && j["msaa"].get<int>() != 0);
 			masterVolume = j.value("masterVolume", masterVolume);
 			engineVolume = j.value("engineVolume", engineVolume);
 			effectsVolume = j.value("effectsVolume", effectsVolume);
@@ -83,6 +100,7 @@ namespace rally {
 			musicVolume = j.value("musicVolume", musicVolume);
 			useMph = j.value("useMph", useMph);
 			manualGearbox = j.value("manualGearbox", manualGearbox);
+			transmission = j.value("transmission", manualGearbox ? 1 : 0);
 			abs = j.value("abs", abs);
 			tcs = j.value("tcs", tcs);
 			antiFlip = j.value("antiFlip", antiFlip);
@@ -95,12 +113,15 @@ namespace rally {
 			steerDeadzone = j.value("steerDeadzone", steerDeadzone);
 			steerLinearity = j.value("steerLinearity", steerLinearity);
 			keyboardSteerSpeed = j.value("keyboardSteerSpeed", keyboardSteerSpeed);
+			ffbStrength = j.value("ffbStrength", ffbStrength); ffbInvert = j.value("ffbInvert", ffbInvert); rumble = j.value("rumble", rumble);
 			if (j.contains("keys")) for (int i = 0; i < (int)Action::Count && i < (int)j["keys"].size(); ++i) keys[i] = j["keys"][i];
 			if (j.contains("keysAlt")) for (int i = 0; i < (int)Action::Count && i < (int)j["keysAlt"].size(); ++i) keysAlt[i] = j["keysAlt"][i];
 			if (j.contains("pad")) for (int i = 0; i < (int)Action::Count && i < (int)j["pad"].size(); ++i) pad[i] = j["pad"][i];
+			if (j.contains("joy")) for (int i = 0; i < (int)Action::Count && i < (int)j["joy"].size(); ++i) joy[i] = j["joy"][i];
 			if (j.contains("steerAxis")) axisFromJson(j["steerAxis"], steerAxis);
 			if (j.contains("throttleAxis")) axisFromJson(j["throttleAxis"], throttleAxis);
 			if (j.contains("brakeAxis")) axisFromJson(j["brakeAxis"], brakeAxis);
+			if (j.contains("clutchAxis")) axisFromJson(j["clutchAxis"], clutchAxis);
 		}
 		catch (const std::exception& e) {
 			log::warn("settings: failed to parse %s: %s", path.c_str(), e.what());
@@ -122,7 +143,9 @@ namespace rally {
 		j["lastJoinAddress"] = lastJoinAddress; j["port"] = port; j["aiCodriverVoice"] = aiCodriverVoice;
 		j["gamepadIndex"] = gamepadIndex; j["steerDeadzone"] = steerDeadzone;
 		j["steerLinearity"] = steerLinearity; j["keyboardSteerSpeed"] = keyboardSteerSpeed;
-		j["keys"] = keys; j["keysAlt"] = keysAlt; j["pad"] = pad;
+		j["ffbStrength"] = ffbStrength; j["ffbInvert"] = ffbInvert; j["rumble"] = rumble;
+		j["keys"] = keys; j["keysAlt"] = keysAlt; j["pad"] = pad; j["joy"] = joy;
+		j["clutchAxis"] = axisToJson(clutchAxis); j["transmission"] = transmission;
 		j["steerAxis"] = axisToJson(steerAxis);
 		j["throttleAxis"] = axisToJson(throttleAxis);
 		j["brakeAxis"] = axisToJson(brakeAxis);

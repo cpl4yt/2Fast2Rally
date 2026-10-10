@@ -21,10 +21,10 @@ namespace rally {
 		void emitForCar(const CarVisual& v, const CarSpec& spec, float dt, int quality, bool backfire);
 		void emitImpact(Vector3 pos, Color c, int count);
 		void update(float dt);
-		void draw(const Camera3D& cam, Texture2D tex);
+		void draw(const Camera3D& cam, Texture2D tex, float light = 1.0f);
 
 		// Weather (camera-relative volume).
-		void drawWeather(const Camera3D& cam, float dt, bool rain, bool snow, Vector3 carVel);
+		void drawWeather(const Camera3D& cam, float dt, bool rain, bool snow, Vector3 carVel, float light = 1.0f);
 
 	private:
 		void spawn(const Particle& p);

@@ -12,7 +12,7 @@ namespace rally {
 		switch (w) { case Weather::Clear: return "Clear"; case Weather::Overcast: return "Overcast"; case Weather::Rain: return "Rain"; default: return "?"; }
 	}
 	const char* timeOfDayName(TimeOfDay t) {
-		switch (t) { case TimeOfDay::Day: return "Day"; case TimeOfDay::Dusk: return "Dusk"; default: return "?"; }
+		switch (t) { case TimeOfDay::Day: return "Day"; case TimeOfDay::Dusk: return "Dusk"; case TimeOfDay::Night: return "Night"; default: return "?"; }
 	}
 
 	// ------------------------------------------------------------------
@@ -36,7 +36,7 @@ namespace rally {
 			d.treeDensity = j.value("treeDensity", d.treeDensity);
 			std::string w = j.value("weather", std::string("clear"));
 			d.weather = w == "rain" ? Weather::Rain : w == "overcast" ? Weather::Overcast : Weather::Clear;
-			d.timeOfDay = j.value("timeOfDay", std::string("day")) == "dusk" ? TimeOfDay::Dusk : TimeOfDay::Day;
+			{ std::string tod = j.value("timeOfDay", std::string("day")); d.timeOfDay = tod == "dusk" ? TimeOfDay::Dusk : tod == "night" ? TimeOfDay::Night : TimeOfDay::Day; }
 			for (auto& p : j.at("points")) d.points.push_back({ p[0].get<float>(), p[1].get<float>() });
 			if (j.contains("surfaceSegments"))
 				for (auto& s : j["surfaceSegments"]) d.surfaceSegments.push_back({ s["from"], s["to"], surfaceFromName(s["surface"]) });
@@ -71,7 +71,7 @@ namespace rally {
 		j["terrainAmplitude"] = d.terrainAmplitude; j["terrainScale"] = d.terrainScale;
 		j["treeDensity"] = d.treeDensity;
 		j["weather"] = d.weather == Weather::Rain ? "rain" : d.weather == Weather::Overcast ? "overcast" : "clear";
-		j["timeOfDay"] = d.timeOfDay == TimeOfDay::Dusk ? "dusk" : "day";
+		j["timeOfDay"] = d.timeOfDay == TimeOfDay::Dusk ? "dusk" : d.timeOfDay == TimeOfDay::Night ? "night" : "day";
 		auto pts = nlohmann::json::array();
 		for (auto& p : d.points) pts.push_back({ std::round(p.x * 10) / 10, std::round(p.y * 10) / 10 });
 		j["points"] = pts;
@@ -317,6 +317,49 @@ namespace rally {
 			}
 		}
 
+		// --- Smooth "road height" field on a coarse grid ---
+		// Gaussian-weighted average of nearby road heights plus the distance to
+		// the nearest road point. The land near the road follows this field and
+		// fades into the free-form hills further out, so there are no cliffs
+		// where the road and the noise terrain disagree.
+		const float cc = 8.0f;
+		int cnx = (int)((nx * cell) / cc) + 2, cnz = (int)((nz * cell) / cc) + 2;
+		std::vector<float> sumW((size_t)cnx * cnz, 0.0f), sumWY((size_t)cnx * cnz, 0.0f), cDist((size_t)cnx * cnz, 1e9f);
+		const float sigma = 40.0f, CR = 150.0f;
+		int crc = (int)std::ceil(CR / cc);
+		for (int i = 0; i < (int)samples.size(); i += 2) {
+			const RoadSample& s = samples[i];
+			int cx = (int)std::floor((s.pos.x - originX) / cc + 0.5f);
+			int cz = (int)std::floor((s.pos.z - originZ) / cc + 0.5f);
+			for (int dz = -crc; dz <= crc; ++dz) {
+				int z = cz + dz;
+				if (z < 0 || z >= cnz) continue;
+				for (int dx = -crc; dx <= crc; ++dx) {
+					int x = cx + dx;
+					if (x < 0 || x >= cnx) continue;
+					float wx = originX + x * cc, wz = originZ + z * cc;
+					float d2 = (wx - s.pos.x) * (wx - s.pos.x) + (wz - s.pos.z) * (wz - s.pos.z);
+					if (d2 > CR * CR) continue;
+					size_t k = (size_t)z * cnx + x;
+					float w = std::exp(-d2 / (2 * sigma * sigma));
+					sumW[k] += w;
+					sumWY[k] += w * s.pos.y;
+					cDist[k] = std::min(cDist[k], std::sqrt(d2));
+				}
+			}
+		}
+		auto coarse = [&](const std::vector<float>& g, float x, float z, float def0) {
+			float fx = (x - originX) / cc, fz = (z - originZ) / cc;
+			int ix = std::clamp((int)std::floor(fx), 0, cnx - 2), iz = std::clamp((int)std::floor(fz), 0, cnz - 2);
+			float tx = std::clamp(fx - ix, 0.0f, 1.0f), tz = std::clamp(fz - iz, 0.0f, 1.0f);
+			size_t k = (size_t)iz * cnx + ix;
+			float a = g[k], b = g[k + 1], c = g[k + cnx], d = g[k + cnx + 1];
+			if (a > 1e8f || b > 1e8f || c > 1e8f || d > 1e8f) return def0;
+			return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz;
+		};
+		std::vector<float> field((size_t)cnx * cnz, 1e9f);
+		for (size_t k = 0; k < field.size(); ++k) if (sumW[k] > 1e-4f) field[k] = sumWY[k] / sumW[k];
+
 		const bool snow = def.environment == "snow";
 		const bool forest = def.environment == "forest";
 		for (int z = 0; z < nz; ++z) {
@@ -324,15 +367,19 @@ namespace rally {
 				size_t k = (size_t)z * nx + x;
 				float wx = originX + x * cell, wz = originZ + z * cell;
 				float base = baseHeight(wx, wz);
+				float dist = coarse(cDist, wx, wz, 1e9f);
+				float roadField = coarse(field, wx, wz, base);
+				// Land: road-following near the stage, free hills far away.
+				float land = roadField + (base - roadField) * smoothstep(hw + 10.0f, 130.0f, std::min(dist, 1e6f));
 				int idx = roadIdx[k];
-				if (idx < 0) { height[k] = base; continue; }
+				if (idx < 0) { height[k] = land; continue; }
 				const RoadSample& s = samples[idx];
 				float d = roadDist[k];
 				float roadY = s.pos.y;
 				float h;
 				if (s.bridge) {
 					float gully = roadY - 7.5f;
-					h = gully + (std::max(base, gully) - gully) * smoothstep(hw + 5.0f, hw + 20.0f, d);
+					h = gully + (std::max(land, gully) - gully) * smoothstep(hw + 5.0f, hw + 20.0f, d);
 				}
 				else if (d <= hw) {
 					float t = d / hw;
@@ -347,8 +394,8 @@ namespace rally {
 						float u = d - shoulder;
 						if (snow) near += 0.75f * std::exp(-(u - 1.6f) * (u - 1.6f) / 1.8f);   // snowbank
 						else if (forest) near -= 0.35f * std::exp(-(u - 1.5f) * (u - 1.5f) / 0.9f); // ditch
-						float t = smoothstep(0.0f, 14.0f, u);
-						h = near + (base - near) * t;
+						float t = smoothstep(0.0f, 12.0f, u);
+						h = near + (land - near) * t;
 					}
 				}
 				height[k] = h;
@@ -742,9 +789,16 @@ namespace rally {
 					};
 					// Skip verge strips that would lie over another part of the
 					// road (the two legs of a hairpin).
-					Vector3 outer = sp(a, o2);
-					int ck = cellIndex(outer.x, outer.z);
-					if (ck >= 0 && roadIdx[ck] >= 0 && std::abs(roadIdx[ck] - i) > 40 && roadDist[ck] < hw + 1.0f) continue;
+					// A verge point belongs to this stretch only if its nearest
+					// road sample is close by along the stage.
+					bool foreign = false;
+					for (const RoadSample* rsp : { &a, &b })
+						for (float off : { o1, o2 }) {
+							Vector3 q = edge(*rsp, side * off, 0);
+							int ck = cellIndex(q.x, q.z);
+							if (ck >= 0 && roadIdx[ck] >= 0 && std::abs(roadIdx[ck] - i) > 25) foreign = true;
+						}
+					if (foreign) continue;
 					Color c0 = shoulderCol, c1 = shoulderCol;
 					c1.a = 255;
 					quadUp(shoulder, sp(a, o0), sp(a, o1), sp(b, o1), sp(b, o0), { 0, va }, { 0.3f, va }, { 0.3f, vb }, { 0, vb }, c0);

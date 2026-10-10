@@ -20,7 +20,7 @@ namespace rally {
 
 		// Bump whenever a payload shape changes so mismatched builds refuse
 		// each other cleanly instead of misreading packets.
-		static constexpr uint32_t kProtocolVersion = 1;
+		static constexpr uint32_t kProtocolVersion = 2; // 2 = v1.0 (rally mode, night)
 
 		// First byte of every packet identifies the payload.
 		enum class MsgType : uint8_t {

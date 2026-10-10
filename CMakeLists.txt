@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(2Fast2Rally VERSION 0.1.0 LANGUAGES C CXX)
+project(2Fast2Rally VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,6 +29,7 @@ set(RALLY_SOURCES
     src/core/physicsEngine.cpp
     src/core/networkManager.cpp
     src/core/netAddr.cpp
+    src/core/forceFeedback.cpp
     src/core/log.cpp
     src/core/crashHandler.cpp
     src/core/settings.cpp
@@ -55,6 +56,14 @@ set(RALLY_SOURCES
 )
 
 add_executable(2Fast2Rally ${RALLY_SOURCES})
+
+# Windows: exe icon + version info, generated from 2Fast2Rally.rc.in so the
+# version above is the single source of truth.
+if(WIN32)
+    set(RALLY_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/res/icon.ico")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/2Fast2Rally.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/2Fast2Rally.rc" @ONLY)
+    target_sources(2Fast2Rally PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/2Fast2Rally.rc")
+endif()
 target_include_directories(2Fast2Rally PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${JSON_DIR}/include"
@@ -66,7 +75,7 @@ target_compile_definitions(2Fast2Rally PRIVATE RALLY_VERSION="${PROJECT_VERSION}
 if(WIN32)
     target_include_directories(2Fast2Rally PRIVATE "${RAYLIB_DIR}/include")
     target_link_directories(2Fast2Rally PRIVATE "${RAYLIB_DIR}/lib")
-    target_link_libraries(2Fast2Rally PRIVATE raylib ws2_32 opengl32 gdi32 winmm shell32 user32 dbghelp)
+    target_link_libraries(2Fast2Rally PRIVATE raylib ws2_32 opengl32 gdi32 winmm shell32 user32 dbghelp dinput8 dxguid)
     # Static runtime so the zip needs no MinGW DLLs next to the exe.
     target_link_options(2Fast2Rally PRIVATE -static -static-libgcc -static-libstdc++)
     option(RALLY_SHOW_CONSOLE "Keep a console window for logs" OFF)

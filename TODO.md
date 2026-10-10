@@ -111,10 +111,16 @@ completes all 3 stages, and a host + navigator pair on localhost finish together
 - [x] Bug bash (automated runs on every stage/car/weather; fixes for hairpin props, stop zone, cockpit, RWD traction)
 - [x] Tag `v0.1.0-beta`
 
-## Known issues for the next pass
-- The AI driver sometimes needs a reset at the first two Col de Brume hairpins (only affects the AI / navigator practice).
-- Co-driver voice is text-to-speech.
-- Car models are procedural low-poly.
+## v1.0.0 (done)
+- [x] Rally mode (solo + co-op), 5 stages, 3 cars (AWD/RWD/FWD), night
+- [x] Steering-wheel force feedback + gamepad rumble
+- [x] Smoother terrain, no self-overlapping roads, editor overlap warning
+- [x] How to Play / Credits, exe icon + version info, pause-menu fixes
+
+## Still needs people
+- [ ] Playtests with 3-5 pairs (PLAYTEST.md)
+- [ ] Real internet co-op test
+- [ ] Tune force feedback on real wheels
 
 ---
 

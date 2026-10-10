@@ -17,6 +17,7 @@ namespace rally {
 		float lampIntensity;   // car lights
 		bool precipitation;    // rain or snow falling
 		bool snowfall;
+		bool night;            // stars, no sun glow
 	};
 	Environment makeEnvironment(const std::string& env, Weather w, TimeOfDay t);
 

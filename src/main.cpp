@@ -23,6 +23,9 @@ int main(int argc, char** argv) {
 		else if (a == "--nettest-join") opts.netJoin = true;
 		else if (a == "--ai") opts.aiDriver = true;
 		else if (a == "--navigator") opts.asNavigator = true;
+		else if (a == "--screens") opts.screens = true;
+		else if (a == "--rally") opts.rally = true;
+		else if (a == "--htest") opts.hTest = true;
 		else if (a == "--genstages") opts.genStages = true;
 		else if (a == "--stage") opts.stage = next(0);
 		else if (a == "--car") opts.car = next(0);
@@ -34,7 +37,7 @@ int main(int argc, char** argv) {
 	}
 
 	// Automated runs log to their own file so several can run side by side.
-	bool automated = opts.selfTest || opts.menuShot || opts.netHost || opts.netJoin;
+	bool automated = opts.selfTest || opts.menuShot || opts.netHost || opts.netJoin || opts.screens;
 	rally::log::init(automated ? "logs/" + opts.shotPrefix + ".log" : "logs/rally.log");
 	rally::crash::install();
 

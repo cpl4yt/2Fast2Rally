@@ -154,7 +154,7 @@ void main() {
 			e.fogDensity = 0.0016f;
 			e.lampIntensity = 0.0f;
 		}
-		else {
+		else if (t == TimeOfDay::Dusk) {
 			e.skyTop = { 38, 46, 92, 255 };
 			e.skyHorizon = { 235, 135, 80, 255 };
 			e.sunDir = Vector3Normalize({ 0.85f, 0.14f, 0.2f });
@@ -162,6 +162,17 @@ void main() {
 			e.ambient = { 0.22f, 0.22f, 0.32f };
 			e.fogDensity = 0.0019f;
 			e.lampIntensity = 1.0f;
+		}
+		else {
+			// Night: moonlight + the car's lights do the work.
+			e.skyTop = { 6, 8, 18, 255 };
+			e.skyHorizon = { 22, 28, 46, 255 };
+			e.sunDir = Vector3Normalize({ -0.4f, 0.6f, 0.3f });
+			e.sunColor = { 0.16f, 0.19f, 0.28f };
+			e.ambient = { 0.09f, 0.1f, 0.15f };
+			e.fogDensity = 0.0024f;
+			e.lampIntensity = 1.7f;
+			e.night = true;
 		}
 		if (w == Weather::Overcast || w == Weather::Rain) {
 			float dark = w == Weather::Rain ? 0.75f : 0.9f;
@@ -401,6 +412,27 @@ void main() {
 		int hy = std::clamp((int)hz.y, 0, h);
 		DrawRectangleGradientV(0, 0, w, std::max(1, hy), env_.skyTop, env_.skyHorizon);
 		DrawRectangle(0, hy, w, h - hy, env_.skyHorizon);
+		if (env_.night && !env_.precipitation) {
+			// Stars: fixed directions on the sky dome, projected each frame.
+			static std::vector<Vector3> stars;
+			if (stars.empty()) {
+				Rng r(77);
+				for (int i = 0; i < 500; ++i) {
+					float a = r.range(0, 2 * PI), y = r.range(0.08f, 1.0f);
+					float rr = std::sqrt(1 - y * y);
+					stars.push_back({ std::cos(a) * rr, y, std::sin(a) * rr });
+				}
+			}
+			Vector3 fwd0 = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
+			for (size_t i = 0; i < stars.size(); ++i) {
+				if (Vector3DotProduct(stars[i], fwd0) < 0.2f) continue;
+				Vector2 sp = GetWorldToScreen(Vector3Add(cam.position, Vector3Scale(stars[i], 1500.0f)), cam);
+				if (sp.y > hy) continue;
+				unsigned char b = (unsigned char)(120 + (i * 37) % 135);
+				DrawRectangle((int)sp.x, (int)sp.y, (i % 7 == 0) ? 2 : 1, (i % 7 == 0) ? 2 : 1, Color{ b, b, (unsigned char)std::min(255, b + 20), 255 });
+			}
+			return;
+		}
 		// Sun glow.
 		Vector3 sunW = Vector3Add(cam.position, Vector3Scale(env_.sunDir, 2000.0f));
 		Vector3 toSun = Vector3Subtract(sunW, cam.position);

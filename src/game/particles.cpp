@@ -123,7 +123,7 @@ namespace rally {
 		parts_.erase(std::remove_if(parts_.begin(), parts_.end(), [](const Particle& p) { return p.life <= 0; }), parts_.end());
 	}
 
-	void Particles::draw(const Camera3D& cam, Texture2D tex) {
+	void Particles::draw(const Camera3D& cam, Texture2D tex, float light) {
 		if (parts_.empty()) return;
 		rlDrawRenderBatchActive();
 		rlDisableDepthMask();
@@ -134,6 +134,7 @@ namespace rally {
 				float t = p.life / p.maxLife;
 				Color c = p.color;
 				c.a = (unsigned char)(c.a * std::min(1.0f, t * 1.5f));
+				if (!p.additive) { c.r = (unsigned char)(c.r * light); c.g = (unsigned char)(c.g * light); c.b = (unsigned char)(c.b * light); }
 				DrawBillboard(cam, tex, p.pos, p.size, c);
 			}
 			rlDrawRenderBatchActive();
@@ -142,7 +143,7 @@ namespace rally {
 		rlEnableDepthMask();
 	}
 
-	void Particles::drawWeather(const Camera3D& cam, float dt, bool rain, bool snow, Vector3 carVel) {
+	void Particles::drawWeather(const Camera3D& cam, float dt, bool rain, bool snow, Vector3 carVel, float light) {
 		if (!rain && !snow) { drops_.clear(); return; }
 		const int count = snow ? 900 : 700;
 		const float R = snow ? 22.0f : 16.0f;
@@ -167,12 +168,12 @@ namespace rally {
 			if (rel.z > R) d.p.z -= 2 * R; else if (rel.z < -R) d.p.z += 2 * R;
 			if (rel.y < -R * 0.4f) d.p.y += R * 1.2f; else if (rel.y > R * 0.8f) d.p.y -= R * 1.2f;
 			if (snow) {
-				DrawCube(d.p, 0.05f, 0.05f, 0.05f, Color{ 255, 255, 255, 220 });
+				DrawCube(d.p, 0.05f, 0.05f, 0.05f, Color{ (unsigned char)(255 * light), (unsigned char)(255 * light), (unsigned char)(255 * light), 220 });
 			}
 			else {
 				Vector3 streak = Vector3Subtract(fall, Vector3Scale(carVel, 0.6f));
 				Vector3 tail = Vector3Subtract(d.p, Vector3Scale(streak, 0.035f));
-				DrawLine3D(d.p, tail, Color{ 200, 210, 225, 110 });
+				DrawLine3D(d.p, tail, Color{ (unsigned char)(200 * light), (unsigned char)(210 * light), (unsigned char)(225 * light), 110 });
 			}
 		}
 		rlDrawRenderBatchActive();

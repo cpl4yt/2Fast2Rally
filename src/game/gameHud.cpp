@@ -19,6 +19,7 @@ namespace rally {
 
 		// Curved arrow: sweep angle grows as the corner gets tighter.
 		void drawCornerArrow(Vector2 c, float size, int dir, int severity, Color col) {
+			dir = -dir; // the arc below bends toward -dir; flip so it bends toward the corner
 			float sweep = severity == 0 ? 170.0f : 25.0f + (6 - severity) * 22.0f;
 			float r = size * 0.42f;
 			float startDeg = 90.0f;  // pointing up (screen), start at bottom of arc
@@ -168,6 +169,18 @@ namespace rally {
 		DrawRectangle((int)(bar.x + bar.width * 0.92f), (int)bar.y, 2, (int)bar.height, WHITE);
 		if (spec.turbo) {
 			DrawRectangleRec({ bar.x, bar.y + bar.height + 4 * s, bar.width * v.boost, 5 * s }, Color{ 120, 180, 255, 255 });
+		}
+		// Clutch gauge (H-pattern) and engine state.
+		if (car_.transmission == 2) {
+			Rectangle cb = { panel.x - 26 * s, panel.y + 10 * s, 14 * s, panel.height - 20 * s };
+			DrawRectangleRec(cb, Color{ 15, 16, 20, 190 });
+			float p = car_.clutchPedal();
+			DrawRectangleRec({ cb.x + 2 * s, cb.y + cb.height * (1 - p), cb.width - 4 * s, cb.height * p }, Color{ 120, 180, 255, 255 });
+			ui::text("C", cb.x + cb.width * 0.5f, cb.y + cb.height + 4 * s, 18 * s, ui::kTextDim, ui::Center);
+		}
+		if (!car_.engineRunning()) {
+			float a = 0.5f + 0.5f * std::sin((float)GetTime() * 6.0f);
+			ui::text("ENGINE OFF - press I", panel.x + panel.width * 0.5f, panel.y - 62 * s, 26 * s, fade(ui::kBad, 0.4f + 0.6f * a), ui::Center);
 		}
 		if (v.damage > 0.05f) {
 			std::snprintf(buf, sizeof buf, "DAMAGE %d%%", (int)(v.damage * 100));
@@ -328,7 +341,7 @@ namespace rally {
 		float s = ui::s();
 		int W = GetScreenWidth(), H = GetScreenHeight();
 		DrawRectangle(0, 0, W, H, Color{ 0, 0, 0, 140 });
-		Rectangle p = { W * 0.5f - 260 * s, H * 0.5f - 230 * s, 520 * s, 460 * s };
+		Rectangle p = { W * 0.5f - 260 * s, H * 0.5f - 280 * s, 520 * s, 560 * s };
 		ui::panel(p, ui::kBg);
 		if (run_.partnerLost) {
 			ui::text("PARTNER DISCONNECTED", W * 0.5f, p.y + 26 * s, 34 * s, ui::kBad, ui::Center, true);
@@ -356,29 +369,28 @@ namespace rally {
 		}
 		ui::text("PAUSED", W * 0.5f, p.y + 26 * s, 50 * s, ui::kAccent, ui::Center, true);
 		float y = p.y + 120 * s;
-		if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, "Resume") || ui::back()) {
+		if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, "Resume")) {
 			run_.paused = false;
 			if (run_.online) session_.sendPause(false);
 		}
 		y += 76 * s;
-		if (!run_.online) {
+		if (!run_.online && !rally_.active) {
 			if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, "Restart Stage")) {
 				startStage(stageIndex_, carIndex_, weather_, timeOfDay_, run_.role, false);
 				return;
 			}
 			y += 76 * s;
 		}
-		if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, "Settings")) {
-			settingsReturn_ = Screen::Stage;
-			endStage();
-			if (run_.online && session_.isHost()) session_.sendBackToLobby();
-			openScreen(Screen::Settings);
-			if (run_.online) settingsReturn_ = Screen::Lobby; else settingsReturn_ = Screen::SoloSetup;
-			return;
-		}
-		y += 76 * s;
+		// Volume can be changed without leaving the stage.
+		Settings& cfg = settings();
+		if (ui::slider({ p.x + 40 * s, y, p.width - 80 * s, 44 * s }, "Master", cfg.masterVolume, 0, 1)) SetMasterVolume(cfg.masterVolume);
+		y += 52 * s;
+		ui::slider({ p.x + 40 * s, y, p.width - 80 * s, 44 * s }, "Engine", cfg.engineVolume, 0, 1); y += 52 * s;
+		ui::slider({ p.x + 40 * s, y, p.width - 80 * s, 44 * s }, "Co-driver", cfg.voiceVolume, 0, 1); y += 64 * s;
 		if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, run_.online ? (session_.isHost() ? "Back to Lobby" : "Leave Rally") : "Quit to Menu")) {
 			bool online = run_.online;
+			cfg.save(kSettingsPath);
+			rally_ = RallyState{};
 			endStage();
 			if (online && session_.isHost()) { session_.sendBackToLobby(); openScreen(Screen::Lobby); }
 			else if (online) { session_.stop(); openScreen(Screen::MainMenu); }
@@ -427,6 +439,34 @@ namespace rally {
 
 		float by = p.y + p.height - 90 * s;
 		float bw = (p.width - 100 * s) / 3.0f;
+
+		// --- Rally mode: running total and the next stage ---
+		if (rally_.active) {
+			bool last = rally_.index + 1 >= rally_.count;
+			char rb[128];
+			std::snprintf(rb, sizeof rb, "RALLY  stage %d of %d   total %s", rally_.index + 1, rally_.count, ui::formatTime(rally_.total).c_str());
+			ui::text(last ? "RALLY COMPLETE  -  total " + ui::formatTime(rally_.total) : std::string(rb), W * 0.5f, by - 44 * s, 28 * s, last ? ui::kGood : ui::kAccent, ui::Center);
+			bool canDrive = !run_.online || session_.isHost();
+			if (!last && canDrive) {
+				if (ui::button({ p.x + 30 * s, by, bw * 1.6f, 60 * s }, "Next Stage (" + std::to_string(rally_.index + 2) + "/" + std::to_string(rally_.count) + ")")) {
+					rally_.index++;
+					if (run_.online) { endStage(); hostStartStage(); }
+					else startStage(rally_.index, carIndex_, weather_, timeOfDay_, run_.role, false);
+					return;
+				}
+			}
+			else if (!canDrive) ui::text("Waiting for the host...", p.x + 30 * s, by + 16 * s, 22 * s, ui::kTextDim);
+			if (ui::button({ p.x + p.width - 30 * s - bw * 1.2f, by, bw * 1.2f, 60 * s }, last ? (run_.online && session_.isHost() ? "Back to Lobby" : "Finish") : "Abandon Rally")) {
+				bool online = run_.online;
+				rally_ = RallyState{};
+				endStage();
+				if (online && session_.isHost()) { session_.sendBackToLobby(); lobby_.clientReady = false; lobbyChanged(); openScreen(Screen::Lobby); }
+				else if (online) { session_.stop(); openScreen(Screen::MainMenu); }
+				else openScreen(Screen::MainMenu);
+			}
+			return;
+		}
+
 		if (!run_.online) {
 			if (ui::button({ p.x + 30 * s, by, bw, 60 * s }, "Retry")) { startStage(stageIndex_, carIndex_, weather_, timeOfDay_, run_.role, false); return; }
 			if (ui::button({ p.x + 50 * s + bw, by, bw, 60 * s }, "Next Stage")) {

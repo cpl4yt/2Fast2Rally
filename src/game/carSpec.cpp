@@ -19,6 +19,12 @@ namespace rally {
 		return torqueCurve.back().y;
 	}
 
+	float CarSpec::maxTorque() const {
+		float m = 0;
+		for (auto& p : torqueCurve) m = std::max(m, p.y);
+		return m > 0 ? m : 250.0f;
+	}
+
 	namespace {
 		Color colorFrom(const nlohmann::json& j, Color def) {
 			if (!j.is_array() || j.size() < 3) return def;
@@ -67,7 +73,7 @@ namespace rally {
 				if (j.contains("gears")) c.gears = j["gears"].get<std::vector<float>>();
 				get(j, "finalDrive", c.finalDrive); get(j, "reverseRatio", c.reverseRatio);
 				get(j, "drivetrainEfficiency", c.drivetrainEfficiency); get(j, "shiftTime", c.shiftTime);
-				get(j, "engineBraking", c.engineBraking);
+				get(j, "engineBraking", c.engineBraking); get(j, "engineInertia", c.engineInertia); get(j, "stallRpm", c.stallRpm); get(j, "clutchTorqueScale", c.clutchTorqueScale);
 				get(j, "brakeForce", c.brakeForce); get(j, "brakeBias", c.brakeBias); get(j, "handbrakeForce", c.handbrakeForce);
 				get(j, "maxSteerDeg", c.maxSteerDeg); get(j, "steerSpeedReduction", c.steerSpeedReduction); get(j, "steerRate", c.steerRate);
 				get(j, "dragCoeff", c.dragCoeff); get(j, "rollingResistance", c.rollingResistance); get(j, "downforce", c.downforce);

@@ -6,14 +6,14 @@ has the pace notes and the stage map; the driver only sees what the navigator
 calls. Built in C++ on raylib, reusing the engine pieces from Prairie
 (rigid-body physics, ENet networking, build setup, tree/rock models).
 
-**Version 0.1.0-beta** - 3 stages, 2 cars, gravel / tarmac / snow, rain and dusk.
+**Version 1.0.0** - 5 stages, 3 cars (AWD / RWD / FWD), gravel / tarmac / snow / mixed, clear / overcast / rain, day / dusk / night, single stages or a full rally, steering-wheel force feedback and gamepad rumble.
 
 ---
 
 ## Playing
 
 ### Solo
-Main menu -> **Solo Stage**. Pick a stage, car, weather and time of day, and a role:
+Main menu -> **Solo**. Pick *Single stage* or *Full rally* (every stage back to back, times added up), then a car, weather, time of day and a role:
 - **Driver** - an AI co-driver reads the pace notes to you.
 - **Navigator** - an AI drives; you practise calling the notes on time.
 
@@ -52,7 +52,15 @@ If the connection drops mid-stage the game pauses. The navigator can press
 
 Steering wheels: Settings -> Controls -> *Steering / Throttle / Brake axis*,
 click and move the wheel or pedal. Use *Invert* / *Pedal* if a pedal reads
-backwards.
+backwards. Force feedback (DirectInput wheels: self-aligning torque, centring,
+road texture, impacts) has a strength slider and an invert toggle; Xbox-style
+pads get rumble.
+
+**Transmission** (Settings -> Gameplay, or the Solo screen): *Automatic*, *Sequential*
+(Q / E) or *H-pattern + clutch*. In H-pattern, hold the clutch (Left Shift or a clutch
+pedal) to select a gear (1-6, 0 = reverse, N = neutral, or a shifter's gates). Release
+the clutch with some revs to pull away - drop it too fast and you stall; press **I**
+(Ignition) with the clutch in or in neutral to restart.
 
 Other keys: **F11** fullscreen, **F3** debug overlay, **F5** reload car tuning.
 
@@ -96,6 +104,9 @@ automatically if it isn't installed).
   bridges, jumps, pace-note overrides). Edit them in-game with
   **Stage Editor** (drag points, Shift+click to add, 1-6 surface, B bridge,
   J jump, Ctrl+S to save, Test Drive).
+- **Logo / icon**: `res/logo.png` is shown on the main menu; `tools/genicon.ps1 -FromPng my.png`
+  rebuilds `res/icon.png` + `res/icon.ico` (exe icon; rebuild after). `tools/maketransparent.ps1`
+  clears a white background.
 - **Co-driver voice**: `tools/genvoice.ps1` regenerates `res/audio/notes/*.wav`
   with Windows text-to-speech. Drop in your own recordings with the same names.
 
@@ -105,6 +116,8 @@ automatically if it isn't installed).
 2Fast2Rally.exe --nettest-host --stage 2 --shots host     (then, separately)
 2Fast2Rally.exe --nettest-join --shots join
 2Fast2Rally.exe --menushot --shots menu
+2Fast2Rally.exe --selftest --rally --car 2 --shots rally   (AI drives the full rally)
+2Fast2Rally.exe --screens                                (screenshots every menu screen)
 ```
 The AI drives a full stage, writes `logs/NAME.log` (progress, speed, FPS) and
 screenshots, then exits. Crashes write `logs/crash-*.txt` with a stack trace.
@@ -119,8 +132,10 @@ src/game/   vehicle (raycast suspension + tyre model), stage (spline road, terra
 res/        models & textures (from Prairie), stages, cars, voice clips, fonts
 ```
 
-## Known beta limitations
-- The co-driver voice is text-to-speech, not a recorded co-driver.
+## Known limitations
+- The co-driver voice is text-to-speech, not a recorded co-driver (drop your own recordings into `res/audio/notes`).
 - Online play is direct IP only: no matchmaking or relay server yet.
-- The AI driver is cautious and sometimes needs a reset on tight hairpins.
 - Car models are procedural low-poly.
+- Force feedback needs a DirectInput FFB wheel (Logitech, Thrustmaster, Fanatec...); the game takes exclusive FFB control while running.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.

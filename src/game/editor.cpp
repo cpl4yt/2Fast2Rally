@@ -50,6 +50,7 @@ namespace rally {
 	void Game::editorRebuildPreview() {
 		ed_.preview.build(ed_.def, Weather::Clear, TimeOfDay::Day, false);
 		ed_.previewNotes = generatePaceNotes(ed_.preview);
+		ed_.closest = trackClosestApproach(ed_.def.points, 160.0f);
 		if (ed_.selectedNote >= (int)ed_.previewNotes.size()) ed_.selectedNote = -1;
 	}
 
@@ -309,6 +310,7 @@ namespace rally {
 			openScreen(Screen::MainMenu);
 			return;
 		}
+		if (e.closest < 45.0f) ui::text("Warning: the road passes within " + std::to_string((int)e.closest) + " m of itself", x, H - 64 * s, 18 * s, ui::kBad);
 		if (e.dirty) ui::text("Unsaved changes", x, H - 40 * s, 18 * s, ui::kBad);
 		if (e.statusTimer > 0) ui::text(e.status, 20 * s, H - 40 * s, 22 * s, ui::kAccent);
 	}

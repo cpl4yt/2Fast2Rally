@@ -10,7 +10,7 @@
 
 namespace rally {
 	enum class Weather { Clear = 0, Overcast, Rain, Count };
-	enum class TimeOfDay { Day = 0, Dusk, Count };
+	enum class TimeOfDay { Day = 0, Dusk, Night, Count };
 	const char* weatherName(Weather w);
 	const char* timeOfDayName(TimeOfDay t);
 
