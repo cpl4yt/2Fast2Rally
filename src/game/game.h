@@ -139,6 +139,7 @@ namespace rally {
 		// --- HUD (gameHud.cpp) ---
 		void drawHud();
 		void drawDriverHud();
+		void drawDashboard(const CarVisual& v, const CarSpec& spec);
 		void drawNavigatorHud();
 		void drawNoteIcon(const PaceNote& n, Rectangle r, float alpha, bool highlight);
 		void drawNoteTimeline(Rectangle r);

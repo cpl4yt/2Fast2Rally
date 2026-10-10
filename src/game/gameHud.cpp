@@ -144,6 +144,133 @@ namespace rally {
 			ui::text("Call the next note: SPACE / A button   Change view: TAB   Click a note to call it", W * 0.5f, H * 0.9f, 22 * s, ui::kTextDim, ui::Center);
 	}
 
+	namespace {
+		// Analog gauge: 270 degrees of sweep, from bottom-left clockwise to
+		// bottom-right (raylib angles: 0 = right, increasing clockwise).
+		float dialAngle(float t) { return 135.0f + 270.0f * std::clamp(t, 0.0f, 1.04f); }
+		Vector2 dialPoint(Vector2 c, float r, float deg) { return { c.x + std::cos(deg * DEG2RAD) * r, c.y + std::sin(deg * DEG2RAD) * r }; }
+
+		void drawDial(Vector2 c, float r, float value, float maxV, float major, int minorPer, float redFrom,
+			float labelDiv, const char* unit, Color needle, float s) {
+			DrawCircleV(c, r, Color{ 10, 11, 14, 225 });
+			DrawRing(c, r - 4 * s, r, 0, 360, 72, Color{ 70, 74, 84, 255 });
+			if (redFrom < maxV) DrawRing(c, r * 0.80f, r * 0.89f, dialAngle(redFrom / maxV), dialAngle(1.0f), 32, Color{ 210, 40, 40, 230 });
+			float step = major / minorPer;
+			int idx = 0;
+			for (float t = 0; t <= maxV + step * 0.5f; t += step, ++idx) {
+				float a = dialAngle(t / maxV);
+				bool isMajor = idx % minorPer == 0;
+				float len = isMajor ? 0.15f : 0.07f;
+				Color tc = (t >= redFrom) ? Color{ 255, 90, 80, 255 } : (isMajor ? Color{ 235, 235, 240, 255 } : Color{ 140, 145, 155, 255 });
+				DrawLineEx(dialPoint(c, r * (0.93f - len), a), dialPoint(c, r * 0.93f, a), isMajor ? 3.0f * s : 1.5f * s, tc);
+				if (isMajor) {
+					char nb[16];
+					if (labelDiv < 1.0f) std::snprintf(nb, sizeof nb, "%.1f", t);
+					else std::snprintf(nb, sizeof nb, "%d", (int)std::round(t / labelDiv));
+					Vector2 p = dialPoint(c, r * 0.64f, a);
+					float fs = r * 0.15f;
+					ui::text(nb, p.x, p.y - fs * 0.5f, fs, tc, ui::Center);
+				}
+			}
+			ui::text(unit, c.x, c.y + r * 0.62f, std::max(13.0f * s, r * 0.12f), Color{ 140, 145, 155, 255 }, ui::Center);
+			float a = dialAngle(value / maxV);
+			Vector2 tip = dialPoint(c, r * 0.86f, a), tail = dialPoint(c, -r * 0.14f, a);
+			DrawLineEx(tail, tip, 4.0f * s, needle);
+			DrawCircleV(c, r * 0.07f, Color{ 40, 42, 48, 255 });
+			DrawCircleV(c, r * 0.04f, needle);
+		}
+
+		void lamp(float x, float y, float s, const char* txt, bool on, Color col) {
+			Color bg = on ? col : Color{ 35, 37, 44, 230 };
+			Rectangle r = { x, y, 52 * s, 24 * s };
+			DrawRectangleRounded(r, 0.3f, 4, bg);
+			ui::text(txt, x + r.width * 0.5f, y + 3 * s, 17 * s, on ? Color{ 15, 15, 18, 255 } : Color{ 90, 94, 104, 255 }, ui::Center);
+		}
+	}
+
+	void Game::drawDashboard(const CarVisual& v, const CarSpec& spec) {
+		Settings& cfg = settings();
+		float s = ui::s();
+		int W = GetScreenWidth(), H = GetScreenHeight();
+		float t = (float)GetTime();
+
+		// Tachometer (right) with the gear in the middle.
+		Vector2 tc = { W - 250 * s, H - 185 * s };
+		float tr = 160 * s;
+		float tachMax = std::ceil((spec.redline + 600.0f) / 1000.0f) * 1000.0f;
+		drawDial(tc, tr, v.rpm, tachMax, 1000.0f, 4, spec.redline, 1000.0f, "x1000 rpm", Color{ 255, 120, 30, 255 }, s);
+		std::string g = !car_.engineRunning() && run_.role == Role::Driver ? "-" : v.gear < 0 ? "R" : v.gear == 0 ? "N" : std::to_string(v.gear);
+		// Digital gear window below the hub.
+		Rectangle gw = { tc.x - 34 * s, tc.y + tr * 0.14f, 68 * s, 62 * s };
+		DrawRectangleRounded(gw, 0.2f, 4, Color{ 25, 27, 32, 240 });
+		DrawRectangleRoundedLinesEx(gw, 0.2f, 4, 1.5f * s, Color{ 70, 74, 84, 255 });
+		ui::text(g, gw.x + gw.width * 0.5f, gw.y + 4 * s, 54 * s, ui::kAccent, ui::Center, true);
+
+		// Shift lights over the tach.
+		float rpmT = v.rpm / spec.redline;
+		bool limiter = rpmT >= 0.985f;
+		for (int i = 0; i < 9; ++i) {
+			float on = 0.74f + i * 0.028f;
+			Color c = i < 4 ? Color{ 60, 220, 90, 255 } : i < 7 ? Color{ 255, 200, 40, 255 } : Color{ 240, 50, 40, 255 };
+			bool lit = rpmT >= on;
+			if (limiter) { lit = std::fmod(t, 0.16f) < 0.08f; c = Color{ 80, 140, 255, 255 }; }
+			Vector2 p = { tc.x - 96 * s + i * 24 * s, tc.y - tr - 20 * s };
+			DrawCircleV(p, 8 * s, lit ? c : Color{ 30, 32, 38, 230 });
+		}
+
+		// Speedometer (left) with digital readout.
+		bool mph = cfg.useMph;
+		float spd = std::fabs(v.speed) * (mph ? 2.23694f : 3.6f);
+		Vector2 sc = { tc.x - tr - 135 * s, H - 140 * s };
+		float sr = 118 * s;
+		drawDial(sc, sr, spd, mph ? 140.0f : 220.0f, 20.0f, 2, 1e9f, 1.0f, mph ? "mph" : "km/h", Color{ 255, 120, 30, 255 }, s);
+		char buf[32];
+		std::snprintf(buf, sizeof buf, "%d", (int)spd);
+		Rectangle sw = { sc.x - 40 * s, sc.y + sr * 0.16f, 80 * s, 36 * s };
+		DrawRectangleRounded(sw, 0.2f, 4, Color{ 25, 27, 32, 240 });
+		ui::text(buf, sc.x, sw.y + 2 * s, 32 * s, ui::kText, ui::Center);
+
+		// Turbo boost gauge.
+		if (spec.turbo) {
+			Vector2 bc = { sc.x + 30 * s, sc.y - sr - 82 * s };
+			drawDial(bc, 74 * s, v.boost * 1.2f, 1.5f, 0.5f, 5, 1.3f, 0.5f, "BOOST bar", Color{ 120, 180, 255, 255 }, s);
+		}
+
+		// Pedals: throttle, brake, clutch.
+		float px = tc.x + tr + 18 * s, ph = 150 * s, py = tc.y + tr - ph - 6 * s;
+		struct P { const char* l; float v; Color c; } pedals[] = {
+			{ "T", v.throttle, Color{ 60, 220, 90, 255 } },
+			{ "B", v.brake, Color{ 240, 60, 50, 255 } },
+			{ "C", run_.role == Role::Driver ? car_.clutchPedal() : 0.0f, Color{ 90, 160, 255, 255 } },
+		};
+		if (px + 3 * 18 * s > W) px = W - 3 * 18 * s - 4 * s;
+		for (int i = 0; i < 3; ++i) {
+			Rectangle r = { px + i * 18 * s, py, 12 * s, ph };
+			DrawRectangleRec(r, Color{ 15, 16, 20, 210 });
+			float val = std::clamp(pedals[i].v, 0.0f, 1.0f);
+			DrawRectangleRec({ r.x, r.y + r.height * (1 - val), r.width, r.height * val }, pedals[i].c);
+			ui::text(pedals[i].l, r.x + r.width * 0.5f, r.y + r.height + 3 * s, 16 * s, ui::kTextDim, ui::Center);
+		}
+
+		// Warning lamps under the speedo.
+		float lx = sc.x - 2.2f * 56 * s, ly = H - 22 * s - 6 * s;
+		bool engineBad = !car_.engineRunning() || v.damage > 0.3f;
+		lamp(lx, ly, s, "ENG", engineBad, Color{ 240, 60, 50, 255 });
+		lamp(lx + 56 * s, ly, s, "HB", v.handbrake, Color{ 240, 60, 50, 255 });
+		lamp(lx + 112 * s, ly, s, "ABS", cfg.abs && v.brake > 0.5f && std::fabs(v.speed) > 3.0f, Color{ 255, 190, 40, 255 });
+		lamp(lx + 168 * s, ly, s, "LIGHT", world_.env().lampIntensity > 0.0f, Color{ 80, 200, 110, 255 });
+
+		// Messages above the cluster.
+		if (!car_.engineRunning() && run_.role == Role::Driver) {
+			float a = 0.5f + 0.5f * std::sin(t * 6.0f);
+			ui::text("ENGINE OFF - press I", tc.x, tc.y - tr - 70 * s, 26 * s, fade(ui::kBad, 0.4f + 0.6f * a), ui::Center);
+		}
+		if (v.damage > 0.05f) {
+			std::snprintf(buf, sizeof buf, "DAMAGE %d%%", (int)(v.damage * 100));
+			ui::text(buf, sc.x, sc.y - sr - 34 * s, 22 * s, v.damage > 0.5f ? ui::kBad : ui::kAccent, ui::Center);
+		}
+	}
+
 	void Game::drawDriverHud() {
 		Settings& cfg = settings();
 		float s = ui::s();
@@ -151,41 +278,9 @@ namespace rally {
 		const CarVisual& v = displayCar();
 		const CarSpec& spec = cars_[carIndex_];
 
-		// --- Speed / gear / rpm (bottom right) ---
-		float spd = std::fabs(v.speed) * (cfg.useMph ? 2.23694f : 3.6f);
-		Rectangle panel = { W - 300 * s, H - 170 * s, 280 * s, 150 * s };
-		DrawRectangleRounded(panel, 0.12f, 6, Color{ 15, 16, 20, 190 });
+		// --- Instrument cluster (bottom right) ---
 		char buf[64];
-		std::snprintf(buf, sizeof buf, "%d", (int)spd);
-		ui::text(buf, panel.x + 175 * s, panel.y + 18 * s, 78 * s, ui::kText, ui::Right);
-		ui::text(cfg.useMph ? "mph" : "km/h", panel.x + 182 * s, panel.y + 62 * s, 24 * s, ui::kTextDim);
-		std::string g = v.gear < 0 ? "R" : v.gear == 0 ? "N" : std::to_string(v.gear);
-		ui::text(g, panel.x + panel.width - 18 * s, panel.y + 14 * s, 66 * s, ui::kAccent, ui::Right, true);
-		float rpmT = std::clamp(v.rpm / spec.redline, 0.0f, 1.05f);
-		Rectangle bar = { panel.x + 16 * s, panel.y + 108 * s, panel.width - 32 * s, 18 * s };
-		DrawRectangleRec(bar, Color{ 50, 52, 60, 255 });
-		Color rc = rpmT > 0.92f ? ui::kBad : rpmT > 0.8f ? ui::kAccent : ui::kGood;
-		DrawRectangleRec({ bar.x, bar.y, bar.width * std::min(1.0f, rpmT), bar.height }, rc);
-		DrawRectangle((int)(bar.x + bar.width * 0.92f), (int)bar.y, 2, (int)bar.height, WHITE);
-		if (spec.turbo) {
-			DrawRectangleRec({ bar.x, bar.y + bar.height + 4 * s, bar.width * v.boost, 5 * s }, Color{ 120, 180, 255, 255 });
-		}
-		// Clutch gauge (H-pattern) and engine state.
-		if (car_.transmission == 2) {
-			Rectangle cb = { panel.x - 26 * s, panel.y + 10 * s, 14 * s, panel.height - 20 * s };
-			DrawRectangleRec(cb, Color{ 15, 16, 20, 190 });
-			float p = car_.clutchPedal();
-			DrawRectangleRec({ cb.x + 2 * s, cb.y + cb.height * (1 - p), cb.width - 4 * s, cb.height * p }, Color{ 120, 180, 255, 255 });
-			ui::text("C", cb.x + cb.width * 0.5f, cb.y + cb.height + 4 * s, 18 * s, ui::kTextDim, ui::Center);
-		}
-		if (!car_.engineRunning()) {
-			float a = 0.5f + 0.5f * std::sin((float)GetTime() * 6.0f);
-			ui::text("ENGINE OFF - press I", panel.x + panel.width * 0.5f, panel.y - 62 * s, 26 * s, fade(ui::kBad, 0.4f + 0.6f * a), ui::Center);
-		}
-		if (v.damage > 0.05f) {
-			std::snprintf(buf, sizeof buf, "DAMAGE %d%%", (int)(v.damage * 100));
-			ui::text(buf, panel.x + 16 * s, panel.y - 30 * s, 22 * s, v.damage > 0.5f ? ui::kBad : ui::kAccent);
-		}
+		drawDashboard(v, spec);
 
 		// --- Stage time (top centre) ---
 		std::string tt = ui::formatTime(run_.stageTime + run_.penalties);
