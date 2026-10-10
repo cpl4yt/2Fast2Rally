@@ -281,6 +281,7 @@ namespace rally {
 				if (run_.phase == RunPhase::Finished) takeScreenshot(auto_.shotPrefix + "_results.png");
 				if (rally_.active) log::info("selftest: rally done stages=%d total=%.2f", (int)rally_.stageTimes.size(), rally_.total);
 				if (auto_.hTest) log::info("selftest: htest shifts=%d stalls=%d", hTestShifts_, hTestStalls_);
+				log::info("selftest: damage %.0f%% (engine %.2f steer %.2f susp %.2f) lights=%d impacts=%d", car_.visual().damage * 100.0f, car_.engineDamage, car_.steeringDamage, car_.suspensionDamage, car_.lightsBroken, car_.impactCount);
 				log::info("selftest: done finished=%d time=%.2f penalties=%.0f resets=%d cuts=%d notes=%d good=%d avgFps=%.0f minFps=%.0f",
 					run_.phase == RunPhase::Finished ? 1 : 0, run_.finishTime, run_.penalties, run_.resets, run_.cuts, (int)notes_.size(), run_.goodCalls,
 					fpsFrames_ / std::max(0.001, fpsTime_), fpsMin_);

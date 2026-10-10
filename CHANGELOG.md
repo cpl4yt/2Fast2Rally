@@ -48,6 +48,8 @@
 - Roadside posts/rocks could end up on the road; verge strips drawn across the road.
 - Dust and spray glowed at dusk/night.
 - AI driver: reverses out of trouble, safer corner speeds.
+- Damage is far less sensitive: landings no longer count, small knocks do nothing,
+  and a wrecked engine loses 35% power (was 45%).
 
 ## 0.1.0-beta
 - First playable: co-op driver/navigator, 3 stages, 2 cars, pace notes, lobby,

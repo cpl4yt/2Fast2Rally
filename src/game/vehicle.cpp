@@ -258,7 +258,7 @@ namespace rally {
 			if (!limiter_) {
 				Te = spec_.torqueAt(rpm_) * driveThrottle;
 				if (spec_.turbo) Te *= 0.62f + 0.38f * boost_;
-				Te *= 1.0f - 0.45f * engineDamage;
+				Te *= 1.0f - 0.35f * engineDamage;
 			}
 			// Idle governor.
 			if (rpm_ < spec_.idleRpm * 1.02f && driveThrottle < 0.3f)
@@ -522,19 +522,25 @@ namespace rally {
 		dv.y += 9.81f * dt; // remove gravity
 		float impact = Vector3Length(dv);
 		if (impact > 2.8f) {
-			lastImpact = impact;
+			lastImpact = impact;  // sound / particles
 			++impactCount;
 			Vector3 local = Vector3RotateByQuaternion(dv, QuaternionInvert(q));
-			float severity = (impact - 2.8f) * 0.035f;
-			if (local.z < -1.5f) {          // pushed backwards: frontal hit
-				engineDamage = std::min(1.0f, engineDamage + severity);
-				if (impact > 5.0f) {
-					lightsBroken |= (local.x > 0.5f) ? 1 : (local.x < -0.5f) ? 2 : 3;
-					if (impact > 8.0f) lightsBroken |= 4;
+			// Damage only from hits into the car's front/back/sides - landings
+			// and bottoming out (mostly vertical) don't break anything.
+			float hit = std::sqrt(local.x * local.x + local.z * local.z);
+			if (hit > 5.0f) {
+				float severity = (hit - 5.0f) * 0.012f;
+				if (local.z < -2.5f) {          // pushed backwards: frontal hit
+					engineDamage = std::min(1.0f, engineDamage + severity);
+					if (hit > 9.0f) {
+						lightsBroken |= (local.x > 0.5f) ? 1 : (local.x < -0.5f) ? 2 : 3;
+						if (hit > 13.0f) lightsBroken |= 4;
+					}
 				}
+				if (std::fabs(local.x) > 3.0f) steeringDamage = std::min(1.0f, steeringDamage + severity * 0.5f);
 			}
-			if (std::fabs(local.x) > 1.5f) steeringDamage = std::min(1.0f, steeringDamage + severity * 0.6f);
-			suspensionDamage = std::min(1.0f, suspensionDamage + severity * 0.3f);
+			// Only really heavy landings hurt the suspension.
+			if (std::fabs(local.y) > 9.0f) suspensionDamage = std::min(1.0f, suspensionDamage + (std::fabs(local.y) - 9.0f) * 0.01f);
 		}
 		Vector3 accel = scale(sub(v, prevVelocity_), 1.0f / dt);
 		Vector3 rightV = rotateVec(q, { -1, 0, 0 });
@@ -574,7 +580,7 @@ namespace rally {
 		vis.boost = boost_;
 		vis.speed = dot(v, fwdV);
 		vis.dirt = dirt;
-		vis.damage = std::clamp((engineDamage + steeringDamage + suspensionDamage) / 2.0f, 0.0f, 1.0f);
+		vis.damage = std::clamp((engineDamage + steeringDamage + suspensionDamage) / 3.0f, 0.0f, 1.0f);
 		vis.lightsBroken = lightsBroken;
 	}
 }
