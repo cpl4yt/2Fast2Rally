@@ -67,6 +67,7 @@ namespace rally {
 		float steerDeadzone = 0.06f;
 		float steerLinearity = 1.3f;   // >1 = softer around center
 		float keyboardSteerSpeed = 3.2f;
+		float wheelRotation = 900.0f;  // degrees lock-to-lock of the physical wheel (in-game wheel matches 1:1)
 		float ffbStrength = 0.7f;      // steering wheel force feedback
 		bool ffbInvert = false;
 		bool rumble = true;            // gamepad vibration

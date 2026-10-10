@@ -198,9 +198,17 @@ namespace rally {
 		const float absSpeed = Vector3Length(b->linearVelocity);
 
 		// --- Steering ---
-		float maxStep = spec_.steerRate * dt;
-		steer_ += std::clamp(in.steer - steer_, -maxStep, maxStep);
-		float lockScale = 1.0f + (spec_.steerSpeedReduction - 1.0f) * std::clamp(std::fabs(fwdSpeed) / 35.0f, 0.0f, 1.0f);
+		float lockScale = 1.0f;
+		if (in.steerIsWheel) {
+			// Real wheel: the front wheels follow it directly with a constant
+			// ratio (full lock at full rotation) - no smoothing, no speed assist.
+			steer_ = in.steer;
+		}
+		else {
+			float maxStep = spec_.steerRate * dt;
+			steer_ += std::clamp(in.steer - steer_, -maxStep, maxStep);
+			lockScale = 1.0f + (spec_.steerSpeedReduction - 1.0f) * std::clamp(std::fabs(fwdSpeed) / 35.0f, 0.0f, 1.0f);
+		}
 		steerAngle_ = steer_ * spec_.maxSteerDeg * DEG2RAD * lockScale + steeringDamage * 0.06f;
 
 		// --- Gearbox & pedals ---

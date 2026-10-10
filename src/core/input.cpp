@@ -114,7 +114,10 @@ namespace rally::input {
 		kbClutch = keyDown(Action::Clutch) ? std::min(1.0f, kbClutch + dt * 10.0f) : std::max(0.0f, kbClutch - dt * 2.5f);
 
 		float padSteer = readAxis(s.steerAxis);
-		if (std::fabs(padSteer) < s.steerDeadzone) padSteer = 0.0f;
+		// A DirectInput steering axis is a real wheel: keep it linear and raw.
+		bool wheel = s.steerAxis.device >= 0 && s.steerAxis.axis >= 0 && joy::state(s.steerAxis.device).connected;
+		if (wheel) { /* 1:1 */ }
+		else if (std::fabs(padSteer) < s.steerDeadzone) padSteer = 0.0f;
 		else {
 			float sign = padSteer < 0 ? -1.0f : 1.0f;
 			float mag = (std::fabs(padSteer) - s.steerDeadzone) / (1.0f - s.steerDeadzone);
@@ -133,6 +136,7 @@ namespace rally::input {
 		if (anyKb) lastPad = false;
 
 		state.steer = std::clamp(kbSteer + padSteer, -1.0f, 1.0f);
+		state.steerIsWheel = wheel && target == 0.0f;
 		state.throttle = std::max(kbThrottle, padThrottle);
 		state.brake = std::max(kbBrake, padBrake);
 		state.clutch = std::max(kbClutch, padClutch);

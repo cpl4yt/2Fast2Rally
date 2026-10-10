@@ -2,6 +2,7 @@
 #include "game/world.h"
 #include "game/meshBuilder.h"
 #include "core/ui.h"
+#include "core/settings.h"
 #include <raymath.h>
 #include <rlgl.h>
 #include <cmath>
@@ -373,7 +374,9 @@ namespace rally {
 		DrawMesh(crew_, mat, bodyM);
 		{
 			Vector3 hub = { 0.38f, driverEye_.y - 0.3f, driverEye_.z + 0.55f };
-			Matrix m = MatrixMultiply(MatrixRotateZ(v.steerInput * 2.4f), MatrixRotateX(-0.35f)); // +steer = right = clockwise for the driver
+			// +steer = right = clockwise for the driver; turns as far as the real wheel (1:1).
+			float wheelAngle = v.steerInput * settings().wheelRotation * 0.5f * DEG2RAD;
+			Matrix m = MatrixMultiply(MatrixRotateZ(wheelAngle), MatrixRotateX(-0.35f));
 			m = MatrixMultiply(m, MatrixTranslate(hub.x, hub.y, hub.z));
 			DrawMesh(steering_, mat, MatrixMultiply(m, bodyM));
 		}

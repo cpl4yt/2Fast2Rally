@@ -16,6 +16,9 @@ namespace rally {
 		// gate every frame (0 when between gates); keys only on press.
 		int hGear = -2;
 		bool ignition = false;  // edge
+		// Steering comes straight from a real wheel: no smoothing or assists,
+		// the car steers 1:1 with it.
+		bool steerIsWheel = false;
 	};
 
 	namespace input {

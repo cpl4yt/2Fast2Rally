@@ -113,7 +113,7 @@ namespace rally {
 			steerDeadzone = j.value("steerDeadzone", steerDeadzone);
 			steerLinearity = j.value("steerLinearity", steerLinearity);
 			keyboardSteerSpeed = j.value("keyboardSteerSpeed", keyboardSteerSpeed);
-			ffbStrength = j.value("ffbStrength", ffbStrength); ffbInvert = j.value("ffbInvert", ffbInvert); rumble = j.value("rumble", rumble);
+			ffbStrength = j.value("ffbStrength", ffbStrength); wheelRotation = j.value("wheelRotation", wheelRotation); ffbInvert = j.value("ffbInvert", ffbInvert); rumble = j.value("rumble", rumble);
 			if (j.contains("keys")) for (int i = 0; i < (int)Action::Count && i < (int)j["keys"].size(); ++i) keys[i] = j["keys"][i];
 			if (j.contains("keysAlt")) for (int i = 0; i < (int)Action::Count && i < (int)j["keysAlt"].size(); ++i) keysAlt[i] = j["keysAlt"][i];
 			if (j.contains("pad")) for (int i = 0; i < (int)Action::Count && i < (int)j["pad"].size(); ++i) pad[i] = j["pad"][i];
@@ -143,7 +143,7 @@ namespace rally {
 		j["lastJoinAddress"] = lastJoinAddress; j["port"] = port; j["aiCodriverVoice"] = aiCodriverVoice;
 		j["gamepadIndex"] = gamepadIndex; j["steerDeadzone"] = steerDeadzone;
 		j["steerLinearity"] = steerLinearity; j["keyboardSteerSpeed"] = keyboardSteerSpeed;
-		j["ffbStrength"] = ffbStrength; j["ffbInvert"] = ffbInvert; j["rumble"] = rumble;
+		j["ffbStrength"] = ffbStrength; j["wheelRotation"] = wheelRotation; j["ffbInvert"] = ffbInvert; j["rumble"] = rumble;
 		j["keys"] = keys; j["keysAlt"] = keysAlt; j["pad"] = pad; j["joy"] = joy;
 		j["clutchAxis"] = axisToJson(clutchAxis); j["transmission"] = transmission;
 		j["steerAxis"] = axisToJson(steerAxis);

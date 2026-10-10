@@ -19,6 +19,9 @@
   (mixed tarmac/gravel) — 5 stages in total.
 - **New car**: Vespera 1.6 FWD hot hatch — 3 cars (AWD, RWD, FWD).
 - **Night** time of day: stars, moonlight, and you drive on your headlights and light pod.
+- **1:1 steering wheels**: a wheel bound through DirectInput steers raw (no smoothing,
+  curve, deadzone or speed assist); set *Wheel rotation* to your wheel's range and the
+  in-car wheel and front wheels follow it exactly.
 - **Steering-wheel force feedback** (DirectInput): self-aligning torque from the
   front tyres, speed-sensitive centring, gravel/snow road texture, impact kicks.
   Strength slider + invert toggle.

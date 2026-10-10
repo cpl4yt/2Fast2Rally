@@ -476,7 +476,9 @@ namespace rally {
 			y2 += 6 * s;
 			ui::slider({ x2, y2, w2, h * 0.85f }, "Steering deadzone", cfg.steerDeadzone, 0, 0.3f); y2 += h;
 			ui::slider({ x2, y2, w2, h * 0.85f }, "Steering linearity", cfg.steerLinearity, 1, 2.5f, "%.2f", 1.0f); y2 += h;
-			ui::slider({ x2, y2, w2, h * 0.85f }, "Keyboard steering speed", cfg.keyboardSteerSpeed, 1, 8, "%.1f", 1.0f); y2 += h + 8 * s;
+			ui::slider({ x2, y2, w2, h * 0.85f }, "Keyboard steering speed", cfg.keyboardSteerSpeed, 1, 8, "%.1f", 1.0f); y2 += h;
+			if (ui::slider({ x2, y2, w2, h * 0.85f }, "Wheel rotation (match your wheel)", cfg.wheelRotation, 180, 1080, "%.0f deg", 1.0f)) cfg.wheelRotation = std::round(cfg.wheelRotation / 10.0f) * 10.0f;
+			y2 += h + 8 * s;
 			ui::text(ffb::wheelAvailable() ? std::string("Force feedback: ") + ffb::wheelName() : "Force feedback: no FFB wheel found", x2, y2, 20 * s, ffb::wheelAvailable() ? ui::kGood : ui::kTextDim);
 			y2 += 30 * s;
 			ui::slider({ x2, y2, w2, h * 0.85f }, "Force feedback strength", cfg.ffbStrength, 0, 1); y2 += h;
