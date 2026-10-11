@@ -801,7 +801,7 @@ namespace rally {
 			break;
 		}
 		case 2: attach(carRender_.bonnetEye(), 0.04f); fov -= 4; break;
-		case 3: attach(carRender_.driverEye(), 0.1f); fov -= 8; break;
+		case 3: attach(Vector3Add(carRender_.driverEye(), { 0, settings().seatHeight, settings().seatForward }), 0.1f); fov -= 8; break;
 		case 4: attach(carRender_.codriverEye(), 0.1f); fov -= 6; break;
 		}
 		cam_.fovy = fov;

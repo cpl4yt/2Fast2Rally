@@ -19,7 +19,14 @@
 - **Rally mode**: pick an event and drive its stages back to back on a combined time,
   solo or in co-op. Each event has its own leaderboard. Editor-made stages go into
   a Custom Stages event.
-- **New car**: Vespera 1.6 FWD hot hatch — 3 cars (AWD, RWD, FWD).
+- **9 cars**: new Vespera (FWD hot hatch), Imperia (AWD turbo saloon), Quattra
+  (Group B 5-cylinder), Mito (classic mini), Vortex (modern Rally1), Escala (70s RWD)
+  and Banshee (V8 rally-raid 4x4), each with its own body style and livery.
+- **Rev-matched shifts**: with the H-pattern you can shift without the clutch if you
+  match the revs, like in a real car.
+- **Cockpit**: three-spoke wheel, gauges on the dash behind it, seats, roll cage,
+  hydraulic handbrake and gear lever; *Seat height* / *Seat forward* sliders in
+  Settings -> Graphics.
 - **Night** time of day: stars, moonlight, and you drive on your headlights and light pod.
 - **1:1 steering wheels**: a wheel bound through DirectInput steers raw (no smoothing,
   curve, deadzone or speed assist); set *Wheel rotation* to your wheel's range and the
@@ -41,6 +48,11 @@
   warns if an edited road gets too close to itself.
 - Default camera is the cockpit view (it's a first-person rally game).
 - Network protocol version 2 — 1.0 and the beta can't join each other.
+- **Hitboxes reworked**: trees, rocks and logs collide at their real (measured) size;
+  the car's roof, pillars, nose and sides touch the ground, not just its corners.
+- Damage resets when a stage ends or restarts — every stage starts with a fresh car.
+- Car models polished: shut lines, handles, skirts, plates, aerials, lamp housings,
+  quarter glass and a proper interior you can see through the windows.
 
 **Fixed**
 - One shift press could skip gears (1st -> 3rd -> 6th); the automatic box could cascade
@@ -48,6 +60,8 @@
 - Pace-note arrows on the HUD pointed the wrong way.
 - The text-to-speech co-driver no longer reads notes when a human is navigating.
 - Esc opened and immediately closed the pause menu.
+- Cockpit view: the dash and roof lining no longer block the road.
+- Solo rally: "Next Stage" could load a stage from the wrong event.
 - The in-car steering wheel turned the wrong way.
 - Door numbers mirrored on one side of the car.
 - Roadside posts/rocks could end up on the road; verge strips drawn across the road.

@@ -392,6 +392,14 @@ namespace rally {
 			video |= ui::toggle({ x, y, w, h }, "V-Sync", cfg.vsync); y += h + g;
 			ui::toggle({ x, y, w, h }, "4x MSAA (restart to apply)", cfg.msaa); y += h + g;
 			ui::slider({ x, y, w, h }, "Field of view", cfg.fov, 55, 100, "%.0f", 1.0f); y += h + g;
+			{
+				// Cockpit camera, shown in cm.
+				float hcm = cfg.seatHeight * 100.0f, fcm = cfg.seatForward * 100.0f;
+				ui::slider({ x, y, w * 0.49f, h }, "Seat height", hcm, -15, 15, "%+.0f cm", 1.0f);
+				ui::slider({ x + w * 0.51f, y, w * 0.49f, h }, "Seat forward", fcm, -20, 15, "%+.0f cm", 1.0f);
+				cfg.seatHeight = hcm * 0.01f; cfg.seatForward = fcm * 0.01f;
+				y += h + g;
+			}
 			ui::slider({ x, y, w, h }, "Draw distance", cfg.drawDistance, 200, 900, "%.0f m", 1.0f); y += h + g;
 			ui::choice({ x, y, w, h }, "Particles", cfg.particleQuality, { "Off", "Low", "High" }); y += h + g;
 			ui::toggle({ x, y, w, h }, "Show FPS", cfg.showFps); y += h + g;

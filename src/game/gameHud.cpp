@@ -547,7 +547,7 @@ namespace rally {
 				if (ui::button({ p.x + 30 * s, by, bw * 1.6f, 60 * s }, "Next Stage (" + std::to_string(rally_.index + 2) + "/" + std::to_string(rally_.count) + ")")) {
 					rally_.index++;
 					if (run_.online) { endStage(); hostStartStage(); }
-					else startStage(rally_.index, carIndex_, weather_, timeOfDay_, run_.role, false);
+					else startStage(rally_.stageAt(rally_.index), carIndex_, weather_, timeOfDay_, run_.role, false);
 					return;
 				}
 			}

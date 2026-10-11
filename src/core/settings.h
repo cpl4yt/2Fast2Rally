@@ -29,6 +29,7 @@ namespace rally {
 		bool vsync = true;
 		int windowW = 1600, windowH = 900;
 		float fov = 70.0f;
+		float seatHeight = 0.0f, seatForward = 0.0f; // cockpit camera offsets (m)
 		float drawDistance = 450.0f;
 		int particleQuality = 2;  // 0 off, 1 low, 2 high
 		bool showFps = false;

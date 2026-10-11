@@ -489,7 +489,7 @@ namespace rally {
 		};
 		for (float sx : { 1.0f, -1.0f }) {
 			// A-pillars: slim body-coloured posts along the windscreen corners.
-			tube({ sx * (W - 0.12f), belt + 0.03f, cabFront - 0.03f }, { sx * (W - 0.13f - sh.roofInset * 0.5f), roofY - 0.05f, cabFront - sh.frontSlope + 0.02f }, 0.03f, shade(bodyC, 0.85f));
+			tube({ sx * (W - 0.12f), belt + 0.03f, cabFront - 0.03f }, { sx * (W - 0.13f - sh.roofInset * 0.5f), roofY - 0.05f, cabFront - sh.frontSlope + 0.02f }, 0.022f, shade(bodyC, 0.85f));
 			interior.box({ sx * (W - 0.2f), (floorY + hoopTop) * 0.5f, hoopZ }, { 0.025f, (hoopTop - floorY) * 0.5f, 0.025f }, cageC);
 			// Bucket seats: cushion, bolsters and back.
 			float x = sx * 0.38f;
