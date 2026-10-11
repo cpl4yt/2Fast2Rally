@@ -97,6 +97,11 @@ namespace rally {
 
 			int kind = KIND_BLOCK;
 
+			// Extra local-space points tested against the terrain on top of the
+			// box's 8 corners (vehicle roof, panel middles) so a body rests on
+			// its real outline instead of sinking until a corner touches.
+			std::vector<Vector3> probes;
+
 			// --- Per-step outputs (read by the caller after step()) ---
 			// grounded: had a support contact whose normal pointed
 			//   substantially upward this step. landingImpactSpeed: how fast

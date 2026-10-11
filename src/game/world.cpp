@@ -252,6 +252,40 @@ void main() {
 			propModels_.push_back(m);
 			propScale_.push_back(s);
 			propYOffset_.push_back(yo);
+
+			// Collision size from the model itself.
+			PropKind kind = (PropKind)(propModels_.size() - 1);
+			if (m.meshCount > 0 && kind != PropKind::GrassTall) {
+				BoundingBox bb = GetModelBoundingBox(m);
+				bool tree = kind <= PropKind::DeadTree;
+				if (tree) {
+					// Trunk radius: vertices in a band above the root flare,
+					// 35th percentile of their distance from the trunk axis.
+					std::vector<float> d;
+					for (int mi = 0; mi < m.meshCount; ++mi) {
+						const Mesh& mesh = m.meshes[mi];
+						if (!mesh.vertices) continue;
+						for (int vi = 0; vi < mesh.vertexCount; ++vi) {
+							Vector3 p = Vector3Transform({ mesh.vertices[vi * 3], mesh.vertices[vi * 3 + 1], mesh.vertices[vi * 3 + 2] }, m.transform);
+							float y = p.y * s + yo;
+							if (y < 1.0f || y > 2.6f) continue;
+							d.push_back(std::sqrt(p.x * p.x + p.z * p.z) * s);
+						}
+					}
+					float r = 0.3f;
+					if (!d.empty()) {
+						std::sort(d.begin(), d.end());
+						r = d[(size_t)(d.size() * 0.35f)];
+					}
+					r = std::clamp(r, 0.12f, 1.1f); // the big pines really are ~2 m across
+					setPropCollision(kind, { r, r, 6.0f });
+					log::info("world: %s trunk radius %.2f m", pf.path, r);
+				}
+				else {
+					float hx = (bb.max.x - bb.min.x) * 0.5f * s * 0.85f, hz = (bb.max.z - bb.min.z) * 0.5f * s * 0.85f;
+					setPropCollision(kind, { hx, hz, (bb.max.y - bb.min.y) * s });
+				}
+			}
 		}
 		// Marker post: red/white bands.
 		{

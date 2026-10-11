@@ -75,6 +75,11 @@ namespace rally {
 		bool collides;
 	};
 
+	// Collision size of a prop kind at scale 1 (measured from its model).
+	struct PropCollision { float halfX = 0.28f, halfZ = 0.28f, height = 6.0f; };
+	void setPropCollision(PropKind k, const PropCollision& c);
+	const PropCollision& propCollision(PropKind k);
+
 	struct Banner {
 		Vector3 pos;
 		float yaw;

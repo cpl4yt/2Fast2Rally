@@ -396,10 +396,15 @@ namespace rally {
 		const Collider& c = colliders[colliderIndex];
 		Vector3 axes[3];
 		boxAxes(c.orientation, axes);
-		Vector3 verts[8];
-		boxVertices(c.position, axes, c.halfExtents, verts);
+		Vector3 boxVerts[8];
+		boxVertices(c.position, axes, c.halfExtents, boxVerts);
+		std::vector<Vector3> verts(boxVerts, boxVerts + 8);
+		if (c.bodyId >= 0) {
+			for (const Vector3& lp : bodies[c.bodyId].probes)
+				verts.push_back(add(c.position, add(add(scale(axes[0], lp.x), scale(axes[1], lp.y)), scale(axes[2], lp.z))));
+		}
 
-		for (int i = 0; i < 8; ++i) {
+		for (int i = 0; i < (int)verts.size(); ++i) {
 			float h = terrainHeight(verts[i].x, verts[i].z);
 			if (verts[i].y < h) {
 				Contact ct{};

@@ -12,6 +12,9 @@
 
 namespace rally {
 	namespace {
+		// Steering wheel tilt about x: the top leans away from the driver.
+		constexpr float kWheelTilt = 0.38f;
+
 		struct Section { float z, halfW, yBot, yTop, topInset; };
 
 		// Cross-section polygon (x left-positive), 8 points.
@@ -98,7 +101,7 @@ namespace rally {
 
 	void CarRenderer::unload() {
 		if (!built_) return;
-		for (Mesh* m : { &body_, &cabin_, &glass_, &wheel_, &interior_, &crew_, &steering_, &headL_, &headR_, &pod_, &tail_, &numberQuad_ })
+		for (Mesh* m : { &body_, &cabin_, &glass_, &wheel_, &interior_, &crew_, &steering_, &headL_, &headR_, &pod_, &tail_, &numberQuad_, &clusterQuad_ })
 			if (m->vertexCount) UnloadMesh(*m);
 		UnloadRenderTexture(numberRT_);
 		built_ = false;
@@ -206,7 +209,10 @@ namespace rally {
 			if (face == 7) c = shade(bodyC, 0.35f);                         // underside
 			if (band == -1 || band == -2) c = black;                        // bumpers
 			// Under the cabin the top of the hull is the interior floor/door tops.
-			if (band >= 0 && lower[band].z >= cabBack - 1e-3f && lower[band + 1].z <= cabFront + 1e-3f && (face == 3 || face == 2 || face == 4)) c = trim;
+			if (band >= 0 && lower[band].z >= cabBack - 1e-3f && lower[band + 1].z <= cabFront + 1e-3f) {
+				if (face == 2 || face == 4) c = trim;   // door tops
+				if (face == 3) c.a = 0;                 // open: the cabin tub is the interior mesh
+			}
 		});
 
 		// --- Cabin / greenhouse (own mesh: drawn inside-out for in-car views) ---
@@ -222,6 +228,7 @@ namespace rally {
 			bool sideFace = face == 1 || face == 5 || face == 2 || face == 4;
 			if (band == 0 && face == 3) { g = true; c = glassC; }      // rear window
 			if (band == 2 && face == 3) { g = true; c = glassC; }      // windscreen
+			if (band == 2 && sideFace) { g = true; c = glassC; }       // front quarter glass (the pillar is a tube)
 			if (band == 1 && sideFace) { g = true; c = glassC; }       // side windows
 			if (band == 1 && face == 3) c = roofC;                     // roof
 			if (face == 7 || face == 0 || face == 6 || band < 0) c.a = 0; // no floor/caps: it sits on the hull
@@ -326,13 +333,36 @@ namespace rally {
 		for (int i = 0; i < 4; ++i) {
 			float sx = (i % 2 == 0) ? 1.0f : -1.0f;
 			float z = i < 2 ? spec.frontAxleZ : spec.rearAxleZ;
-			body.box({ sx * (W - 0.02f), wheelY + spec.wheelRadius * 0.5f, z }, { 0.03f, 0.12f, spec.wheelRadius + 0.08f }, black);
+			body.box({ sx * (W - 0.01f), wheelY + spec.wheelRadius * 0.6f, z }, { 0.012f, 0.08f, spec.wheelRadius + 0.06f }, black);
 			if (sh.flare > 0.0f) {
 				float fx = sx * (W - 0.02f + sh.flare * 0.5f);
 				body.box({ fx, wheelY + spec.wheelRadius + 0.02f, z }, { sh.flare * 0.5f + 0.03f, 0.05f, spec.wheelRadius + 0.12f }, flareC);
 				for (float dz : { -1.0f, 1.0f })
 					body.box({ fx, wheelY + spec.wheelRadius * 0.45f, z + dz * (spec.wheelRadius + 0.09f) }, { sh.flare * 0.5f + 0.03f, spec.wheelRadius * 0.55f, 0.04f }, flareC);
 			}
+		}
+
+		// --- Detailing: shut lines, handles, skirts, trim, plates, antenna ---
+		{
+			Color seam = shade(bodyC, 0.45f);
+			bool twoDoor = spec.style == 1 || spec.style == 4 || spec.style == 7 || spec.style == 5;
+			std::vector<float> seams = { cabFront - 0.06f };
+			if (twoDoor) seams.push_back(cabBack + 0.35f);
+			else { seams.push_back((cabFront + cabBack) * 0.5f - 0.02f); seams.push_back(cabBack + 0.2f); }
+			float seamY = (yb + 0.1f + belt - 0.02f) * 0.5f, seamH = (belt - 0.02f - yb - 0.1f) * 0.5f;
+			for (float sx : { 1.0f, -1.0f }) {
+				for (float z : seams) body.box({ sx * (W + 0.004f), seamY, z }, { 0.004f, seamH, 0.005f }, seam);
+				float handleZ = twoDoor ? cabBack + 0.45f : (cabFront + cabBack) * 0.5f + 0.1f;
+				body.box({ sx * (W + 0.01f), belt - 0.08f, handleZ }, { 0.008f, 0.012f, 0.05f }, Color{ 30, 30, 34, 255 });
+				if (!twoDoor) body.box({ sx * (W + 0.01f), belt - 0.08f, cabBack + 0.32f }, { 0.008f, 0.012f, 0.05f }, Color{ 30, 30, 34, 255 });
+				float skirtLen = (spec.frontAxleZ - spec.rearAxleZ) * 0.5f - spec.wheelRadius - 0.12f;
+				if (skirtLen > 0.1f) body.box({ sx * (W + 0.008f), yb + 0.05f, (spec.frontAxleZ + spec.rearAxleZ) * 0.5f }, { 0.01f, 0.035f, skirtLen }, black);
+				body.box({ sx * (W - 0.055f), belt + 0.012f, (cabBack + cabFront) * 0.5f }, { 0.01f, 0.012f, (cabFront - cabBack) * 0.5f - 0.02f }, black); // window trim
+			}
+			Color plate = { 245, 238, 200, 255 };
+			body.box({ 0, yb + 0.14f, Lz + (sh.bullbar ? 0.075f : 0.075f) }, { 0.22f, 0.05f, 0.005f }, plate);
+			body.box({ 0, belt - sh.tailDrop - 0.24f, -Lz - 0.075f }, { 0.22f, 0.05f, 0.005f }, plate);
+			if (!sh.roofRack) body.box({ -(W - 0.3f), roofY + 0.18f, cabBack + sh.rearSlope + 0.1f }, { 0.004f, 0.18f, 0.004f }, black); // antenna
 		}
 
 		// --- Lights ---
@@ -366,13 +396,14 @@ namespace rally {
 		else {
 			hl.box({ 0.55f, lightY, lightZ }, { 0.16f, 0.06f, 0.03f }, lampC);
 			hr.box({ -0.55f, lightY, lightZ }, { 0.16f, 0.06f, 0.03f }, lampC);
+			for (float sx : { 0.55f, -0.55f }) body.box({ sx, lightY, lightZ - 0.012f }, { 0.185f, 0.08f, 0.025f }, Color{ 40, 40, 44, 255 }); // housings
 		}
 		float podY = sh.bullbar ? lightY + 0.05f : lightY + 0.16f, podZ = sh.bullbar ? Lz + 0.17f : Lz + 0.07f;
 		for (int i = 0; i < 4; ++i) {
 			float x = -0.45f + i * 0.3f;
 			discZ(pod, { x, podY, podZ + 0.01f }, 0.1f, Color{ 255, 248, 220, 255 });
 		}
-		pod.box({ 0, podY, podZ - 0.03f }, { 0.62f, 0.12f, 0.02f }, black);
+		pod.box({ 0, podY, podZ - 0.03f }, { 0.58f, 0.1f, 0.015f }, black);
 		float tailY = belt - sh.tailDrop - 0.12f;
 		tail.box({ W * 0.68f, tailY, -Lz - 0.005f }, { 0.17f, 0.05f, 0.02f }, Color{ 220, 20, 20, 255 });
 		tail.box({ -W * 0.68f, tailY, -Lz - 0.005f }, { 0.17f, 0.05f, 0.02f }, Color{ 220, 20, 20, 255 });
@@ -391,35 +422,96 @@ namespace rally {
 		cylinderX(wheel, { 0, 0, 0 }, R * 0.5f, hwW - 0.02f, 16, Color{ 90, 90, 95, 255 }, Color{ 110, 110, 115, 255 });     // brake disc
 
 		// --- Interior (seen from the in-car cameras) ---
-		interior.box({ 0, belt + 0.02f, cabFront - 0.12f }, { W - 0.14f, 0.09f, 0.16f }, trim);           // dashboard
-		interior.box({ 0, roofY - 0.03f, (cabFront + cabBack) * 0.5f }, { W - 0.18f, 0.02f, (cabFront - cabBack) * 0.42f }, Color{ 70, 70, 75, 255 }); // headliner
-		for (float sx : { 1.0f, -1.0f }) {
-			// A-pillars (as thin slanted boxes).
-			Vector3 a = { sx * (W - 0.13f), belt + 0.04f, cabFront - 0.05f }, b = { sx * (W - 0.16f), roofY - 0.02f, cabFront - 0.7f };
-			Vector3 mid = Vector3Scale(Vector3Add(a, b), 0.5f);
-			float len = Vector3Distance(a, b) * 0.5f;
-			float pitch = std::atan2(b.y - a.y, a.z - b.z);
-			Matrix m = MatrixMultiply(MatrixRotateX(pitch), MatrixTranslate(mid.x, mid.y, mid.z));
-			interior.boxTransformed({ 0.022f, 0.022f, len }, m, trim);
-			// Roll-cage tubes.
-			interior.box({ sx * (W - 0.2f), (belt + roofY) * 0.5f, cabBack + 0.75f }, { 0.025f, (roofY - belt) * 0.5f, 0.025f }, Color{ 200, 200, 205, 255 });
-			// Seats.
-			interior.box({ sx * 0.38f, belt - 0.12f, -0.55f }, { 0.22f, 0.06f, 0.24f }, Color{ 25, 25, 30, 255 });
-			interior.box({ sx * 0.38f, belt + 0.18f, -0.78f }, { 0.22f, 0.32f, 0.05f }, Color{ 25, 25, 30, 255 });
+		// Laid out from the driver's eye: the dash sits at the beltline and the
+		// cluster and wheel below the sightline, so the road stays in view.
+		const float eyeY = belt + std::min(0.32f, sh.roofH - 0.15f);
+		const float eyeZ = std::clamp(cabFront - 0.8f, -0.42f, -0.3f);   // short-nosed cabs sit further back
+		// Inside height of the windscreen / rear window at z (the roof between).
+		auto screenY = [&](float z) {
+			float t = std::clamp((cabFront - z) / sh.frontSlope, 0.0f, 1.0f);
+			return belt + 0.05f + t * (roofY - belt - 0.05f);
+		};
+		auto rearY = [&](float z) {
+			float t = std::clamp((z - cabBack) / sh.rearSlope, 0.0f, 1.0f);
+			return belt + 0.05f + t * (roofY - belt - 0.05f);
+		};
+		const float floorY = std::max(yb + 0.12f, belt - 0.62f);
+		const float seatTop = std::max(belt - 0.4f, floorY + 0.12f);
+		const Color seatC = { 25, 25, 30, 255 }, cageC = { 200, 200, 205, 255 };
+		const float wheelTilt = kWheelTilt;
+		const float clusterHalfH = 0.09f;
+		hubLocal_ = { 0.38f, eyeY - 0.30f, std::min(eyeZ + 0.46f, cabFront - 0.17f) };
+		clusterLocal_ = { 0.38f, eyeY - 0.275f, hubLocal_.z + 0.16f };
+		clusterLocal_.y = std::min(clusterLocal_.y, screenY(clusterLocal_.z) - clusterHalfH - 0.035f); // under the glass
+		const float dashTop = std::min(eyeY - 0.22f, belt + 0.03f);
+		const float dashBack = clusterLocal_.z + 0.03f, dashFront = std::max(cabFront - 0.01f, dashBack + 0.1f);
+		{
+			const float clusterTop = clusterLocal_.y + clusterHalfH;
+			interior.box({ 0, dashTop - 0.12f, (dashBack + dashFront) * 0.5f }, { W - 0.14f, 0.12f, (dashFront - dashBack) * 0.5f }, trim); // dashboard
+			// Binnacle round the gauges, with a short lip over them.
+			float binTop = clusterTop + 0.015f, binBot = dashTop - 0.02f;
+			interior.box({ 0.38f, (binTop + binBot) * 0.5f, clusterLocal_.z + 0.07f }, { 0.2f, std::max(0.02f, (binTop - binBot) * 0.5f), 0.04f }, trim);
+			interior.box({ 0.38f, binTop - 0.008f, clusterLocal_.z - 0.0075f }, { 0.2f, 0.008f, 0.0375f }, trim);
+			// Steering column, from the hub down into the dash.
+			Vector3 dir = { 0, -std::sin(wheelTilt), std::cos(wheelTilt) };
+			Vector3 cc = Vector3Add(hubLocal_, Vector3Scale(dir, 0.14f));
+			interior.boxTransformed({ 0.03f, 0.03f, 0.12f }, MatrixMultiply(MatrixRotateX(wheelTilt), MatrixTranslate(cc.x, cc.y, cc.z)), Color{ 35, 35, 38, 255 });
 		}
-		interior.box({ 0, roofY - 0.05f, cabBack + 0.75f }, { W - 0.2f, 0.025f, 0.025f }, Color{ 200, 200, 205, 255 });
-		// Crew: driver on the left (+x), co-driver on the right.
+		{
+			// Cabin tub: floor, door cards, firewall and rear bulkhead (the hull
+			// is open on top under the cabin so the footwell and seats show).
+			const float zc = (cabBack + cabFront) * 0.5f, hz = (cabFront - cabBack) * 0.5f;
+			interior.box({ 0, floorY - 0.015f, zc }, { W - 0.06f, 0.015f, hz }, Color{ 30, 30, 34, 255 });
+			for (float sx : { 1.0f, -1.0f })
+				interior.box({ sx * (W - 0.085f), (floorY + belt + 0.01f) * 0.5f, zc }, { 0.025f, (belt + 0.01f - floorY) * 0.5f, hz - 0.02f }, trim);
+			interior.box({ 0, (floorY + belt) * 0.5f, cabFront - 0.015f }, { W - 0.06f, (belt - floorY) * 0.5f, 0.015f }, trim);
+			interior.box({ 0, (floorY + belt) * 0.5f, cabBack + 0.015f }, { W - 0.06f, (belt - floorY) * 0.5f, 0.015f }, trim);
+			// Transmission tunnel, gear lever and the hydraulic handbrake.
+			float tunTop = seatTop + 0.06f;
+			interior.box({ 0, (floorY + tunTop) * 0.5f, (eyeZ - 0.4f + dashBack) * 0.5f }, { 0.09f, (tunTop - floorY) * 0.5f, (dashBack - eyeZ + 0.4f) * 0.5f }, trim);
+			interior.box({ 0.04f, tunTop + 0.11f, eyeZ + 0.3f }, { 0.01f, 0.11f, 0.01f }, Color{ 60, 60, 64, 255 });
+			interior.box({ 0.04f, tunTop + 0.23f, eyeZ + 0.3f }, { 0.028f, 0.028f, 0.028f }, Color{ 20, 20, 22, 255 });
+			interior.boxTransformed({ 0.012f, 0.15f, 0.012f }, MatrixMultiply(MatrixRotateX(-0.35f), MatrixTranslate(0.13f, tunTop + 0.14f, eyeZ + 0.02f)), Color{ 200, 40, 30, 255 });
+		}
+		{
+			// Headliner: only under the roof panel, not over the glass.
+			float hb = cabBack + sh.rearSlope + 0.04f, hf = cabFront - sh.frontSlope - 0.04f;
+			if (hf - hb > 0.1f) interior.box({ 0, roofY - 0.03f, (hb + hf) * 0.5f }, { W - 0.18f, 0.02f, (hf - hb) * 0.5f }, Color{ 70, 70, 75, 255 });
+		}
+		// Roll-cage main hoop behind the seats, kept under the rear window.
+		const float hoopZ = eyeZ - 0.55f, hoopTop = std::min(roofY - 0.05f, rearY(hoopZ) - 0.04f);
+		// Box of half-size r round the segment a-b.
+		auto tube = [&](Vector3 a, Vector3 b, float r, Color c) {
+			Vector3 d = Vector3Subtract(b, a), mid = Vector3Scale(Vector3Add(a, b), 0.5f);
+			float hl = std::sqrt(d.x * d.x + d.z * d.z);
+			Matrix m = MatrixMultiply(MatrixRotateX(std::atan2(-d.y, hl)), MatrixRotateY(std::atan2(d.x, d.z)));
+			interior.boxTransformed({ r, r, Vector3Length(d) * 0.5f }, MatrixMultiply(m, MatrixTranslate(mid.x, mid.y, mid.z)), c);
+		};
+		for (float sx : { 1.0f, -1.0f }) {
+			// A-pillars: slim body-coloured posts along the windscreen corners.
+			tube({ sx * (W - 0.12f), belt + 0.03f, cabFront - 0.03f }, { sx * (W - 0.13f - sh.roofInset * 0.5f), roofY - 0.05f, cabFront - sh.frontSlope + 0.02f }, 0.03f, shade(bodyC, 0.85f));
+			interior.box({ sx * (W - 0.2f), (floorY + hoopTop) * 0.5f, hoopZ }, { 0.025f, (hoopTop - floorY) * 0.5f, 0.025f }, cageC);
+			// Bucket seats: cushion, bolsters and back.
+			float x = sx * 0.38f;
+			interior.box({ x, (floorY + seatTop) * 0.5f, eyeZ - 0.2f }, { 0.21f, (seatTop - floorY) * 0.5f, 0.24f }, seatC);
+			for (float bx : { 0.19f, -0.19f }) interior.box({ x + bx, seatTop + 0.04f, eyeZ - 0.2f }, { 0.03f, 0.05f, 0.22f }, seatC);
+			float backTop = std::min(eyeY + 0.04f, rearY(eyeZ - 0.52f) - 0.03f);
+			interior.box({ x, (seatTop + backTop) * 0.5f, eyeZ - 0.47f }, { 0.21f, (backTop - seatTop) * 0.5f, 0.05f }, seatC);
+		}
+		interior.box({ 0, hoopTop, hoopZ }, { W - 0.2f, 0.025f, 0.025f }, cageC);
+		// Crew: driver on the left (+x), co-driver on the right, sat in the
+		// seats with their heads where the in-car cameras are.
 		Color suit1 = accent, suit2 = shade(accent, 0.8f);
-		// Crew head height: under the roof whatever the body style.
-		const float hc = std::min(belt + 0.5f, roofY - 0.2f);
 		for (int seat = 0; seat < 2; ++seat) {
 			float sx = seat == 0 ? 0.38f : -0.38f;
 			Color suit = seat == 0 ? suit1 : suit2;
-			crew.box({ sx, hc - 0.38f, -0.58f }, { 0.17f, 0.24f, 0.11f }, suit);
-			crew.box({ sx, belt - 0.06f, -0.28f }, { 0.15f, 0.06f, 0.2f }, suit);
-			MeshBuilder tmp;
+			const float hc = eyeY - (seat == 0 ? 0.01f : 0.03f), hzc = eyeZ - (seat == 0 ? 0.11f : 0.13f);
+			const float shoulder = eyeY - 0.2f;
+			crew.box({ sx, (seatTop + shoulder) * 0.5f, eyeZ - 0.27f }, { 0.17f, (shoulder - seatTop) * 0.5f, 0.11f }, suit);          // torso
+			crew.box({ sx, seatTop + 0.07f, eyeZ - 0.075f }, { 0.15f, 0.07f, 0.225f }, suit);                                          // thighs
+			crew.box({ sx, (floorY + seatTop + 0.14f) * 0.5f, eyeZ + 0.22f }, { 0.14f, (seatTop + 0.14f - floorY) * 0.5f, 0.07f }, suit); // shins
 			// Helmet as a rough sphere (octahedron-ish).
-			Vector3 h = { sx, hc, -0.55f };
+			Vector3 h = { sx, hc, hzc };
 			float r = 0.13f;
 			Vector3 top = { h.x, h.y + r, h.z }, bot = { h.x, h.y - r, h.z };
 			Vector3 ring[8];
@@ -430,8 +522,8 @@ namespace rally {
 				outwardQuad(crew, a, b, top, top, h, helmet);
 				outwardQuad(crew, a, b, bot, bot, h, helmet);
 			}
-			crew.box({ sx, hc - 0.01f, -0.44f }, { 0.09f, 0.04f, 0.02f }, Color{ 20, 20, 25, 255 }); // visor
-			if (seat == 1) crew.box({ sx, belt + 0.16f, -0.32f }, { 0.1f, 0.01f, 0.07f }, Color{ 250, 250, 240, 255 }); // pace-note book
+			crew.box({ sx, hc - 0.01f, hzc + 0.115f }, { 0.09f, 0.04f, 0.02f }, Color{ 20, 20, 25, 255 }); // visor
+			if (seat == 1) crew.box({ sx, seatTop + 0.16f, eyeZ + 0.1f }, { 0.1f, 0.01f, 0.07f }, Color{ 250, 250, 240, 255 }); // pace-note book
 		}
 		// Steering wheel (origin at hub, in the x-y plane).
 		{
@@ -446,7 +538,12 @@ namespace rally {
 				Matrix m = MatrixMultiply(MatrixRotateZ(ang), MatrixTranslate(mid.x, mid.y, mid.z));
 				steer.boxTransformed({ len + 0.01f, 0.018f, 0.018f }, m, Color{ 30, 30, 30, 255 });
 			}
-			steer.box({ 0, -0.08f, 0 }, { 0.02f, 0.08f, 0.015f }, Color{ 60, 60, 60, 255 });
+			// Three spokes (left, right, bottom) and a hub.
+			Color spoke = { 48, 48, 52, 255 };
+			steer.box({ -rr * 0.5f, -0.01f, 0.008f }, { rr * 0.5f, 0.016f, 0.008f }, spoke);
+			steer.box({ rr * 0.5f, -0.01f, 0.008f }, { rr * 0.5f, 0.016f, 0.008f }, spoke);
+			steer.box({ 0, -rr * 0.5f, 0.008f }, { 0.018f, rr * 0.5f, 0.008f }, spoke);
+			steer.box({ 0, -0.01f, 0.016f }, { 0.035f, 0.035f, 0.016f }, Color{ 28, 28, 30, 255 });
 			steer.box({ 0, rr, 0.005f }, { 0.012f, 0.02f, 0.02f }, Color{ 230, 50, 40, 255 });
 		}
 
@@ -468,9 +565,16 @@ namespace rally {
 		MeshBuilder q;
 		q.quad({ 0, -0.5f, -0.5f }, { 0, -0.5f, 0.5f }, { 0, 0.5f, 0.5f }, { 0, 0.5f, -0.5f }, WHITE, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 });
 		numberQuad_ = q.upload();
+		{
+			// Cluster panel, facing the driver (-z). UVs flipped for render textures;
+			// +x is the driver's left, so u runs from +x to -x.
+			MeshBuilder cq;
+			cq.quad({ 0.5f, -0.5f, 0 }, { -0.5f, -0.5f, 0 }, { -0.5f, 0.5f, 0 }, { 0.5f, 0.5f, 0 }, WHITE, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 });
+			clusterQuad_ = cq.upload();
+		}
 
-		driverEye_ = { 0.38f, hc - 0.03f, -0.3f };
-		codriverEye_ = { -0.38f, hc - 0.05f, -0.32f };
+		driverEye_ = { 0.38f, eyeY, eyeZ };
+		codriverEye_ = { -0.38f, eyeY - 0.02f, eyeZ - 0.02f };
 		bonnetEye_ = { 0.0f, belt + 0.34f, cabFront + 0.02f };
 		spin_[0] = spin_[1] = spin_[2] = spin_[3] = 0;
 		built_ = true;
@@ -545,21 +649,37 @@ namespace rally {
 
 		// Interior + crew.
 		mat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+		world.setEmissive(view == CarView::Interior ? 0.15f : 0.0f); // the roof shades the cabin; keep it readable
 		DrawMesh(interior_, mat, bodyM);
 		DrawMesh(crew_, mat, bodyM);
 		{
-			Vector3 hub = { 0.38f, driverEye_.y - 0.3f, driverEye_.z + 0.55f };
+			Vector3 hub = hubLocal_;
 			// +steer = right = clockwise for the driver; turns as far as the real wheel (1:1).
 			float wheelAngle = v.steerInput * settings().wheelRotation * 0.5f * DEG2RAD;
-			Matrix m = MatrixMultiply(MatrixRotateZ(wheelAngle), MatrixRotateX(-0.35f));
+			Matrix m = MatrixMultiply(MatrixRotateZ(wheelAngle), MatrixRotateX(kWheelTilt));
 			m = MatrixMultiply(m, MatrixTranslate(hub.x, hub.y, hub.z));
 			DrawMesh(steering_, mat, MatrixMultiply(m, bodyM));
 		}
+		world.setEmissive(0.0f);
 
 		// Glass last (translucent). Skipped from inside so the view is clear.
 		if (view == CarView::Exterior) {
 			mat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 			DrawMesh(glass_, mat, bodyM);
 		}
+	}
+
+	void CarRenderer::drawCluster(World& world, const CarVisual& v, Texture2D tex) {
+		if (!built_) return;
+		Matrix bodyM = MatrixMultiply(QuaternionToMatrix(v.rotation), MatrixTranslate(v.position.x, v.position.y, v.position.z));
+		Matrix m = MatrixMultiply(MatrixScale(0.36f, 0.18f, 1.0f), MatrixRotateX(-0.25f));
+		m = MatrixMultiply(m, MatrixTranslate(clusterLocal_.x, clusterLocal_.y, clusterLocal_.z));
+		Material& mat = world.colorMaterial();
+		mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+		mat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+		world.setEmissive(0.9f); // backlit gauges
+		DrawMesh(clusterQuad_, mat, MatrixMultiply(m, bodyM));
+		world.setEmissive(0.0f);
+		mat.maps[MATERIAL_MAP_DIFFUSE].texture = world.whiteTexture();
 	}
 }

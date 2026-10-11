@@ -33,6 +33,11 @@ namespace rally {
 		b.restitution = 0.05f;
 		b.kind = PhysicsEngine::KIND_VEHICLE;
 		body_ = physics.addBody(b);
+		// A new stage starts with a fresh car.
+		engineDamage = steeringDamage = suspensionDamage = dirt = 0.0f;
+		lightsBroken = 0;
+		lastImpact = 0.0f;
+		impactCount = 0;
 		applySpec(spec);
 		resetTo(pos, yaw);
 	}
@@ -60,6 +65,22 @@ namespace rally {
 			w.mountLocal = { w.left ? spec.trackHalf : -spec.trackHalf, spec.mountY, w.front ? spec.frontAxleZ : spec.rearAxleZ };
 		}
 		gear_ = std::clamp(gear_, -1, (int)spec.gears.size());
+
+		// Terrain contact points beyond the box corners: panel/edge middles and
+		// the cabin roof (matches the rendered body styles), so the car lands
+		// on its roof or side instead of sinking until a corner touches.
+		static const float roofRise[] = { 0.52f, 0.40f, 0.55f, 0.50f, 0.46f, 0.54f, 0.48f, 0.48f, 0.58f };
+		const float W = spec.halfExtents.x, H = spec.halfExtents.y, L = spec.halfExtents.z;
+		const float roofY = H + roofRise[std::clamp(spec.style, 0, 8)];
+		b->probes = {
+			{ 0, -H, 0 }, { 0, -H, L * 0.5f }, { 0, -H, -L * 0.5f }, { W, -H, 0 }, { -W, -H, 0 },
+			{ W, 0, 0 }, { -W, 0, 0 }, { W, 0, L * 0.5f }, { -W, 0, L * 0.5f }, { W, 0, -L * 0.5f }, { -W, 0, -L * 0.5f },
+			{ 0, 0, L }, { 0, 0, -L }, { W * 0.5f, -H * 0.5f, L }, { -W * 0.5f, -H * 0.5f, L }, { W * 0.5f, -H * 0.5f, -L }, { -W * 0.5f, -H * 0.5f, -L },
+			{ 0, H, L * 0.5f }, { 0, H, -L * 0.5f },
+			{ W - 0.18f, roofY, -0.9f }, { -(W - 0.18f), roofY, -0.9f }, { W - 0.18f, roofY, -0.1f }, { -(W - 0.18f), roofY, -0.1f }, { 0, roofY, -0.5f },
+			{ W - 0.1f, (H + roofY) * 0.5f, 0.3f }, { -(W - 0.1f), (H + roofY) * 0.5f, 0.3f },
+			{ W - 0.1f, (H + roofY) * 0.5f, -1.2f }, { -(W - 0.1f), (H + roofY) * 0.5f, -1.2f },
+		};
 	}
 
 	void Vehicle::resetTo(Vector3 pos, float yaw) {

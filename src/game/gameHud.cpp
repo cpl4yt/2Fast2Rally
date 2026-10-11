@@ -188,10 +188,9 @@ namespace rally {
 		}
 	}
 
-	void Game::drawDashboard(const CarVisual& v, const CarSpec& spec) {
+	void Game::drawDashboard(const CarVisual& v, const CarSpec& spec, Rectangle area, float s) {
 		Settings& cfg = settings();
-		float s = ui::s();
-		int W = GetScreenWidth(), H = GetScreenHeight();
+		float W = area.x + area.width, H = area.y + area.height;
 		float t = (float)GetTime();
 
 		// Tachometer (right) with the gear in the middle.
@@ -280,7 +279,8 @@ namespace rally {
 
 		// --- Instrument cluster (bottom right) ---
 		char buf[64];
-		drawDashboard(v, spec);
+		// In the cockpit the gauges are on the dashboard behind the wheel instead.
+		if (!cockpitCluster()) drawDashboard(v, spec, { 0, 0, (float)W, (float)H }, ui::s());
 
 		// --- Stage time (top centre) ---
 		std::string tt = ui::formatTime(run_.stageTime + run_.penalties);

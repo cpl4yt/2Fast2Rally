@@ -16,6 +16,9 @@ namespace rally {
 		void unload();
 		// dt advances wheel spin; lampsOn lights the headlights/pod.
 		void draw(World& world, const CarVisual& v, float dt, bool lampsOn, CarView view);
+		// Instrument cluster on the dashboard behind the steering wheel, showing
+		// tex (a render texture of the gauges). Cockpit view only.
+		void drawCluster(World& world, const CarVisual& v, Texture2D tex);
 
 		// Local-space camera anchors.
 		Vector3 driverEye() const { return driverEye_; }
@@ -30,6 +33,8 @@ namespace rally {
 		RenderTexture2D numberRT_{};
 		float spin_[4]{};
 		Vector3 driverEye_{}, codriverEye_{}, bonnetEye_{};
+		Vector3 hubLocal_{}, clusterLocal_{};
+		Mesh clusterQuad_{};
 		bool built_ = false;
 	};
 }

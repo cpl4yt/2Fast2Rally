@@ -144,6 +144,7 @@ namespace rally {
 		settings().save(kSettingsPath);
 		ffb::shutdown();
 		menuCarRender_.unload();
+		if (dashRT_.id) UnloadRenderTexture(dashRT_);
 		if (logo_.id) UnloadTexture(logo_);
 		carRender_.unload();
 		if (musicLoaded_) UnloadMusicStream(menuMusic_);

@@ -511,11 +511,12 @@ namespace rally {
 					float ddx = pr.pos.x - p.x, ddz = pr.pos.z - p.z;
 					if (ddx * ddx + ddz * ddz > radius * radius) continue;
 					PhysicsEngine::StaticBox sb;
-					bool rock = pr.kind >= PropKind::Rock1 && pr.kind <= PropKind::Rock4;
-					bool post = pr.kind == PropKind::Post;
-					float hx = rock ? 0.8f * pr.scale : post ? 0.08f : 0.28f * pr.scale;
-					float hy = rock ? 0.6f * pr.scale : post ? 0.6f : 3.0f;
-					sb.center = { pr.pos.x, pr.pos.y + hy - 0.2f, pr.pos.z };
+					// Axis-aligned box from the measured size (round trunks and
+					// randomly rotated rocks: use the larger horizontal half-size).
+					const PropCollision& pc = propCollision(pr.kind);
+					float hx = std::max(pc.halfX, pc.halfZ) * pr.scale;
+					float hy = pc.height * pr.scale * 0.5f;
+					sb.center = { pr.pos.x, pr.pos.y + hy - 0.1f, pr.pos.z };
 					sb.halfExtents = { hx, hy, hx };
 					sb.friction = 0.6f;
 					sb.restitution = 0.1f;
@@ -523,6 +524,22 @@ namespace rally {
 				}
 			}
 	}
+
+	namespace {
+		PropCollision gPropCollision[(int)PropKind::Count];
+		bool gPropInit = false;
+		void initPropDefaults() {
+			if (gPropInit) return;
+			gPropInit = true;
+			for (int k = (int)PropKind::Rock1; k <= (int)PropKind::Rock4; ++k) gPropCollision[k] = { 0.7f, 0.7f, 1.1f };
+			gPropCollision[(int)PropKind::Stump] = { 0.32f, 0.32f, 0.6f };
+			gPropCollision[(int)PropKind::Log] = { 0.4f, 0.4f, 0.5f };
+			gPropCollision[(int)PropKind::Post] = { 0.07f, 0.07f, 1.2f };
+		}
+	}
+
+	void setPropCollision(PropKind k, const PropCollision& c) { initPropDefaults(); gPropCollision[(int)k] = c; }
+	const PropCollision& propCollision(PropKind k) { initPropDefaults(); return gPropCollision[std::clamp((int)k, 0, (int)PropKind::Count - 1)]; }
 
 	// ------------------------------------------------------------------
 	// Props

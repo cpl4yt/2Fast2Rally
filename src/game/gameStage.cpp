@@ -292,6 +292,14 @@ namespace rally {
 			particles_.update(dt);
 		}
 		updateCamera(dt);
+		if (cockpitCluster()) {
+			// Gauges into a texture for the 3D instrument cluster behind the wheel.
+			if (dashRT_.id == 0) { dashRT_ = LoadRenderTexture(1024, 512); SetTextureFilter(dashRT_.texture, TEXTURE_FILTER_BILINEAR); }
+			BeginTextureMode(dashRT_);
+			ClearBackground(Color{ 8, 9, 12, 255 });
+			drawDashboard(displayCar(), cars_[carIndex_], { 0, 0, 1024, 512 }, 1.2f);
+			EndTextureMode();
+		}
 		drawStage3D(run_.paused ? 0.0f : dt);
 		if (!hideHud_) drawHud();
 	}
@@ -793,7 +801,7 @@ namespace rally {
 			break;
 		}
 		case 2: attach(carRender_.bonnetEye(), 0.04f); fov -= 4; break;
-		case 3: attach(carRender_.driverEye(), 0.06f); fov -= 8; break;
+		case 3: attach(carRender_.driverEye(), 0.1f); fov -= 8; break;
 		case 4: attach(carRender_.codriverEye(), 0.1f); fov -= 6; break;
 		}
 		cam_.fovy = fov;
@@ -912,6 +920,7 @@ namespace rally {
 		world_.drawStage(cam_, settings().drawDistance);
 		bool interior = galleryCam_ < 0 && ((run_.role == Role::Driver && camMode_ >= 2) || (run_.role == Role::Navigator && navView_ != 1));
 		carRender_.draw(world_, v, dt, world_.env().lampIntensity > 0.0f, interior ? CarView::Interior : CarView::Exterior);
+		if (cockpitCluster() && dashRT_.id) carRender_.drawCluster(world_, v, dashRT_.texture);
 		world_.drawWater();
 		{
 			const Environment& e = world_.env();
