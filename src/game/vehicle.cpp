@@ -135,8 +135,18 @@ namespace rally {
 				if (want == 0) gear_ = 0;
 				else if (clutchPedal_ > 0.7f || !engineRunning_) gear_ = want;
 				else {
-					if (grindCooldown_ <= 0.0f) { pendingGrind = true; grindCooldown_ = 0.35f; }
-					gear_ = 0;
+					// Clutchless (floating) shift: the gear slots in if the engine is
+					// spinning at the speed the gearbox needs for it - rev-match it
+					// with a blip (downshift) or let the revs fall (upshift).
+					float Gw = want > 0 ? spec_.gears[want - 1] * spec_.finalDrive : -spec_.reverseRatio * spec_.finalDrive;
+					float targetOmega = drivenSpin() * Gw;
+					float diff = std::fabs(engineOmega_ - targetOmega);
+					bool matched = targetOmega > 20.0f && diff < targetOmega * 0.08f + 12.0f;
+					if (matched) gear_ = want;
+					else {
+						if (grindCooldown_ <= 0.0f) { pendingGrind = true; grindCooldown_ = 0.35f; }
+						gear_ = 0;
+					}
 				}
 			}
 		}
@@ -179,6 +189,9 @@ namespace rally {
 		}
 
 		if (!engineEnabled && gear_ < 1 && transmission == 0) gear_ = 1;
+		// Automatic/sequential downshifts blip the throttle to match revs.
+		if (transmission != 2 && gear_ > 0 && gear_ < before)
+			engineOmega_ = std::max(engineOmega_, std::fabs(drivenSpin() * gearRatioSigned()));
 		if (gear_ != before) {
 			// Automatic/sequential: the auto-clutch is open for shiftTime.
 			shiftTimer_ = transmission == 2 ? 0.0f : spec_.shiftTime;
