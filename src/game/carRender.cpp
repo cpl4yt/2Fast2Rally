@@ -112,24 +112,79 @@ namespace rally {
 		const Color black = { 28, 28, 32, 255 }, glassC = { 40, 55, 70, 150 };
 		MeshBuilder body, glass, interior, crew, wheel, steer, hl, hr, pod, tail;
 
-		const bool wedge = spec.style == 1;
+		// --- Body style ---
+		// Proportions and details per style; the physics box stays the same.
+		struct Shape {
+			float beltOff = 0.02f, roofH = 0.5f, cabBack = -1.6f, cabFront = 0.8f;
+			float rearSlope = 0.42f, frontSlope = 0.72f, roofInset = 0.16f;
+			float noseDrop = 0.24f, tailDrop = 0.04f;
+			int wing = 0;          // 0 none, 1 roof spoiler, 2 ducktail, 3 big rear wing
+			float flare = 0.0f;    // wheel-arch flares
+			bool flareBlack = false, roofScoop = false, splitter = false, diffuser = false;
+			bool quadLights = false, roundLights = false, roofRack = false, bullbar = false;
+			bool snorkel = false, louvres = false, bonnetVent = false, wedgeHull = false;
+		} sh;
+		switch (spec.style) {
+		case 1: // wedge supercar (Bianca)
+			sh.beltOff = -0.02f; sh.roofH = 0.42f; sh.cabBack = -1.25f; sh.cabFront = 0.35f; sh.rearSlope = 0.55f;
+			sh.noseDrop = 0.32f; sh.wing = 2; sh.flare = 0.05f; sh.louvres = true; sh.wedgeHull = true;
+			break;
+		case 2: // supermini (Vespera)
+			sh.beltOff = 0.03f; sh.roofH = 0.52f; sh.cabBack = -Lz + 0.48f; sh.cabFront = 0.62f; sh.rearSlope = 0.22f;
+			sh.frontSlope = 0.7f; sh.roofInset = 0.15f; sh.noseDrop = 0.22f; sh.wing = 1; sh.flare = 0.04f; sh.splitter = true;
+			break;
+		case 3: // saloon (Imperia)
+			sh.roofH = 0.48f; sh.cabBack = -1.3f; sh.cabFront = 0.72f; sh.rearSlope = 0.5f; sh.frontSlope = 0.68f;
+			sh.noseDrop = 0.2f; sh.wing = 3; sh.flare = 0.07f; sh.roofScoop = true; sh.bonnetVent = true; sh.splitter = true;
+			break;
+		case 4: // Group B coupe (Quattra)
+			sh.beltOff = 0.0f; sh.roofH = 0.46f; sh.cabBack = -1.25f; sh.cabFront = 0.35f; sh.rearSlope = 0.3f;
+			sh.frontSlope = 0.55f; sh.roofInset = 0.12f; sh.noseDrop = 0.1f; sh.wing = 3; sh.flare = 0.14f;
+			sh.splitter = true; sh.quadLights = true; sh.bonnetVent = true; sh.louvres = true;
+			break;
+		case 5: // classic mini (Mito)
+			sh.beltOff = 0.04f; sh.roofH = 0.5f; sh.cabBack = -Lz + 0.37f; sh.cabFront = 0.5f; sh.rearSlope = 0.08f;
+			sh.frontSlope = 0.38f; sh.roofInset = 0.12f; sh.noseDrop = 0.14f; sh.tailDrop = 0.06f;
+			sh.flare = 0.04f; sh.flareBlack = true; sh.roundLights = true;
+			break;
+		case 6: // modern WRC (Vortex)
+			sh.beltOff = 0.0f; sh.roofH = 0.48f; sh.cabBack = -1.5f; sh.cabFront = 0.7f; sh.rearSlope = 0.45f;
+			sh.frontSlope = 0.75f; sh.roofInset = 0.18f; sh.noseDrop = 0.3f; sh.wing = 3; sh.flare = 0.16f;
+			sh.splitter = true; sh.diffuser = true; sh.roofScoop = true; sh.bonnetVent = true;
+			break;
+		case 7: // 70s two-door saloon (Escala)
+			sh.roofH = 0.46f; sh.cabBack = -1.0f; sh.cabFront = 0.35f; sh.rearSlope = 0.3f; sh.frontSlope = 0.5f;
+			sh.roofInset = 0.08f; sh.noseDrop = 0.06f; sh.tailDrop = 0.0f; sh.wing = 2; sh.flare = 0.07f;
+			sh.flareBlack = true; sh.quadLights = true; sh.roundLights = true;
+			break;
+		case 8: // rally-raid 4x4 (Banshee)
+			sh.beltOff = 0.0f; sh.roofH = 0.58f; sh.cabBack = -1.6f; sh.cabFront = 0.7f; sh.rearSlope = 0.12f;
+			sh.frontSlope = 0.55f; sh.roofInset = 0.1f; sh.noseDrop = 0.12f; sh.flare = 0.12f; sh.flareBlack = true;
+			sh.roofRack = true; sh.bullbar = true; sh.snorkel = true; sh.roundLights = true;
+			break;
+		default: // 0: 90s turbo hatch (Kestrel)
+			sh.flare = 0.06f; sh.wing = 1; sh.roofScoop = true; sh.splitter = true; sh.bonnetVent = true;
+			break;
+		}
+		const bool wedge = sh.wedgeHull;
 		const float yb = -Hh + 0.04f;          // body bottom
-		const float belt = wedge ? Hh - 0.02f : Hh + 0.02f; // top of the lower body
-
-		float roofY = wedge ? belt + 0.42f : belt + 0.5f;
-		float cabFront = wedge ? 0.35f : 0.8f, cabBack = wedge ? -1.25f : -1.6f;
+		const float belt = Hh + sh.beltOff;    // top of the lower body
+		float roofY = belt + sh.roofH;
+		float cabFront = sh.cabFront, cabBack = sh.cabBack;
+		const Color roofC = spec.roofColor.a > 0 ? spec.roofColor : shade(bodyC, 0.95f);
+		const Color flareC = sh.flareBlack ? black : bodyC;
 
 		// --- Lower body ---
 		std::vector<Section> lower;
 		if (!wedge) {
 			lower = {
-				{ -Lz, W - 0.08f, yb + 0.06f, belt - 0.04f, 0.05f },
-				{ -Lz + 0.12f, W, yb, belt, 0.05f },
+				{ -Lz, W - 0.08f, yb + 0.06f, belt - 0.04f - sh.tailDrop, 0.05f },
+				{ -Lz + 0.12f, W, yb, belt - sh.tailDrop * 0.5f, 0.05f },
 				{ cabBack, W, yb, belt, 0.05f },
 				{ cabFront, W, yb, belt - 0.01f, 0.05f },
-				{ Lz - 0.55f, W, yb, belt - 0.02f, 0.05f },
-				{ Lz - 0.12f, W - 0.03f, yb, belt - 0.14f, 0.08f },
-				{ Lz, W - 0.12f, yb + 0.06f, belt - 0.24f, 0.10f },
+				{ Lz - 0.5f, W, yb, belt - sh.noseDrop * 0.15f, 0.05f },
+				{ Lz - 0.12f, W - 0.03f, yb, belt - sh.noseDrop * 0.6f, 0.08f },
+				{ Lz, W - 0.12f, yb + 0.06f, belt - sh.noseDrop, 0.10f },
 			};
 		}
 		else {
@@ -144,10 +199,12 @@ namespace rally {
 			};
 		}
 		Color trim = { 45, 45, 50, 255 };
+		Color lowerTone = spec.livery == 1 ? accent : bodyC;   // two-tone livery
 		loft(body, nullptr, lower, [&](int band, int face, Color& c, bool&) {
 			c = bodyC;
-			if (face == 7 || face == 0 || face == 6) c = shade(bodyC, 0.55f);   // underside / sills darker
-			if (band == -1 || band == -2) c = black;                         // bumpers
+			if (face == 0 || face == 6) c = shade(lowerTone, 0.7f);          // lower chamfers
+			if (face == 7) c = shade(bodyC, 0.35f);                         // underside
+			if (band == -1 || band == -2) c = black;                        // bumpers
 			// Under the cabin the top of the hull is the interior floor/door tops.
 			if (band >= 0 && lower[band].z >= cabBack - 1e-3f && lower[band + 1].z <= cabFront + 1e-3f && (face == 3 || face == 2 || face == 4)) c = trim;
 		});
@@ -156,8 +213,8 @@ namespace rally {
 		MeshBuilder cabin;
 		std::vector<Section> cab = {
 			{ cabBack, W - 0.06f, belt - 0.01f, belt + 0.05f, 0.08f },
-			{ cabBack + (wedge ? 0.55f : 0.42f), W - 0.1f, belt - 0.01f, roofY, 0.16f },
-			{ cabFront - 0.72f, W - 0.12f, belt - 0.01f, roofY, 0.16f },
+			{ cabBack + sh.rearSlope, W - 0.1f, belt - 0.01f, roofY, sh.roofInset },
+			{ cabFront - sh.frontSlope, W - 0.12f, belt - 0.01f, roofY, sh.roofInset },
 			{ cabFront, W - 0.06f, belt - 0.01f, belt + 0.05f, 0.08f },
 		};
 		loft(cabin, &glass, cab, [&](int band, int face, Color& c, bool& g) {
@@ -166,56 +223,172 @@ namespace rally {
 			if (band == 0 && face == 3) { g = true; c = glassC; }      // rear window
 			if (band == 2 && face == 3) { g = true; c = glassC; }      // windscreen
 			if (band == 1 && sideFace) { g = true; c = glassC; }       // side windows
-			if (band == 1 && face == 3) c = shade(bodyC, 0.95f);       // roof
+			if (band == 1 && face == 3) c = roofC;                     // roof
 			if (face == 7 || face == 0 || face == 6 || band < 0) c.a = 0; // no floor/caps: it sits on the hull
 		});
 		cabin_ = cabin.upload();
 
-		// --- Livery: side stripes, roof number, accent bonnet ---
-		for (float sx : { 1.0f, -1.0f }) {
-			body.box({ sx * (W + 0.006f), belt - 0.16f, 0.0f }, { 0.006f, 0.05f, Lz - 0.25f }, stripe);
-			body.box({ sx * (W + 0.006f), belt - 0.26f, 0.0f }, { 0.006f, 0.025f, Lz - 0.3f }, accent);
+		// --- Livery ---
+		switch (spec.livery) {
+		case 1: // two-tone: lower sides in the accent colour + a pinstripe
+			for (float sx : { 1.0f, -1.0f }) {
+				body.box({ sx * (W + 0.005f), (yb + belt - 0.2f) * 0.5f, 0.0f }, { 0.005f, (belt - 0.2f - yb) * 0.5f - 0.04f, Lz - 0.2f }, accent);
+				body.box({ sx * (W + 0.007f), belt - 0.19f, 0.0f }, { 0.005f, 0.018f, Lz - 0.22f }, stripe);
+			}
+			break;
+		case 2: // diagonal sweep along the doors
+			for (float sx : { 1.0f, -1.0f }) {
+				Matrix m = MatrixMultiply(MatrixRotateX(0.22f), MatrixTranslate(sx * (W + 0.006f), belt - 0.2f, 0.1f));
+				body.boxTransformed({ 0.006f, 0.07f, Lz - 0.45f }, m, stripe);
+				Matrix m2 = MatrixMultiply(MatrixRotateX(0.22f), MatrixTranslate(sx * (W + 0.007f), belt - 0.32f, 0.12f));
+				body.boxTransformed({ 0.006f, 0.03f, Lz - 0.55f }, m2, accent);
+			}
+			break;
+		case 3: // twin racing stripes over bonnet, roof and boot
+			for (float sx : { 0.13f, -0.13f }) {
+				body.box({ sx, belt - sh.noseDrop * 0.3f + 0.012f, (cabFront + Lz) * 0.5f }, { 0.06f, 0.012f, (Lz - cabFront) * 0.5f - 0.05f }, stripe);
+				body.box({ sx, roofY + 0.006f, (cabBack + sh.rearSlope + cabFront - sh.frontSlope) * 0.5f }, { 0.06f, 0.006f, (cabFront - sh.frontSlope - cabBack - sh.rearSlope) * 0.5f }, stripe);
+			}
+			for (float sx : { 1.0f, -1.0f }) body.box({ sx * (W + 0.006f), belt - 0.16f, 0.0f }, { 0.006f, 0.03f, Lz - 0.3f }, stripe);
+			break;
+		default: // side stripe + pinstripe
+			for (float sx : { 1.0f, -1.0f }) {
+				body.box({ sx * (W + 0.006f), belt - 0.16f, 0.0f }, { 0.006f, 0.05f, Lz - 0.25f }, stripe);
+				body.box({ sx * (W + 0.006f), belt - 0.26f, 0.0f }, { 0.006f, 0.025f, Lz - 0.3f }, accent);
+			}
+			break;
 		}
-		body.box({ 0, roofY + 0.005f, cabFront - 1.1f }, { 0.18f, 0.005f, 0.42f }, stripe);
-		if (!wedge) body.box({ 0.0f, roofY + 0.04f, cabBack + 0.38f }, { W - 0.2f, 0.025f, 0.12f }, accent);   // roof spoiler
-		else body.box({ 0.0f, belt + 0.08f, -Lz + 0.12f }, { W - 0.12f, 0.02f, 0.14f }, black);              // ducktail
-		// Bumpers, skid plate, mud flaps, exhaust, mirrors.
+		if (spec.livery != 3 && !sh.roofRack)
+			body.box({ 0, roofY + 0.005f, (cabBack + sh.rearSlope + cabFront - sh.frontSlope) * 0.5f }, { 0.18f, 0.005f, 0.35f }, stripe);
+
+		// --- Aero ---
+		if (sh.wing == 1) body.box({ 0.0f, roofY + 0.04f, cabBack + sh.rearSlope * 0.9f }, { W - 0.2f, 0.025f, 0.12f }, accent);
+		if (sh.wing == 2) body.box({ 0.0f, belt + 0.06f - sh.tailDrop, -Lz + 0.14f }, { W - 0.12f, 0.02f, 0.14f }, black);
+		if (sh.wing == 3) {
+			float wy = belt + 0.3f - sh.tailDrop, wz = -Lz + 0.24f;
+			body.box({ 0, wy, wz }, { W - 0.04f, 0.022f, 0.17f }, accent);
+			for (float sx : { 1.0f, -1.0f }) {
+				body.box({ sx * (W - 0.32f), (belt + wy) * 0.5f, wz + 0.04f }, { 0.025f, (wy - belt) * 0.5f, 0.06f }, black);
+				body.box({ sx * (W - 0.02f), wy + 0.03f, wz }, { 0.012f, 0.09f, 0.19f }, black);
+			}
+		}
+		if (sh.splitter) body.box({ 0, yb + 0.01f, Lz + 0.06f }, { W - 0.08f, 0.015f, 0.08f }, black);
+		if (sh.diffuser) {
+			body.box({ 0, yb + 0.04f, -Lz - 0.06f }, { W - 0.25f, 0.03f, 0.06f }, black);
+			for (int i = -2; i <= 2; ++i) body.box({ i * 0.22f, yb + 0.09f, -Lz - 0.07f }, { 0.01f, 0.05f, 0.06f }, black);
+		}
+		if (sh.roofScoop) body.box({ 0, roofY + 0.035f, cabFront - sh.frontSlope - 0.12f }, { 0.13f, 0.035f, 0.13f }, accent);
+		if (sh.bonnetVent) body.box({ 0, belt - sh.noseDrop * 0.25f + 0.006f, Lz - 0.62f }, { 0.28f, 0.008f, 0.16f }, black);
+		if (sh.louvres)
+			for (int i = 0; i < 5; ++i) body.box({ 0, belt + 0.03f + i * 0.004f, cabBack - 0.08f - i * 0.09f }, { W - 0.22f, 0.008f, 0.025f }, black);
+
+		// --- Rally-raid kit ---
+		if (sh.roofRack) {
+			float ry = roofY + 0.08f, rz0 = cabBack + sh.rearSlope + 0.05f, rz1 = cabFront - sh.frontSlope - 0.05f;
+			for (float sx : { 1.0f, -1.0f }) body.box({ sx * (W - 0.2f), ry, (rz0 + rz1) * 0.5f }, { 0.02f, 0.02f, (rz1 - rz0) * 0.5f }, black);
+			for (float z : { rz0, (rz0 + rz1) * 0.5f, rz1 }) body.box({ 0, ry, z }, { W - 0.2f, 0.02f, 0.02f }, black);
+			Matrix m = MatrixMultiply(MatrixRotateZ(PI * 0.5f), MatrixTranslate(0, ry + 0.12f, rz0 + 0.45f));
+			MeshBuilder spare;
+			cylinderX(spare, { 0, 0, 0 }, spec.wheelRadius, spec.wheelWidth * 0.5f, 16, Color{ 30, 30, 32, 255 }, Color{ 60, 60, 64, 255 });
+			for (size_t k = 0; k + 2 < spare.pos.size(); k += 3) {
+				Vector3 p = Vector3Transform({ spare.pos[k], spare.pos[k + 1], spare.pos[k + 2] }, m);
+				Vector3 n = Vector3Transform({ spare.nrm[k], spare.nrm[k + 1], spare.nrm[k + 2] }, MatrixRotateZ(PI * 0.5f));
+				body.vertex(p, n, { 0, 0 }, Color{ spare.col[k / 3 * 4], spare.col[k / 3 * 4 + 1], spare.col[k / 3 * 4 + 2], 255 });
+			}
+		}
+		if (sh.bullbar) {
+			float by = yb + 0.2f;
+			body.box({ 0, by + 0.12f, Lz + 0.14f }, { W - 0.2f, 0.025f, 0.025f }, black);
+			body.box({ 0, by - 0.02f, Lz + 0.14f }, { W - 0.15f, 0.025f, 0.025f }, black);
+			for (float sx : { 0.3f, -0.3f }) body.box({ sx, by + 0.05f, Lz + 0.14f }, { 0.025f, 0.12f, 0.025f }, black);
+		}
+		if (sh.snorkel) {
+			body.box({ -(W + 0.04f), (belt + roofY) * 0.5f, cabFront - 0.05f }, { 0.04f, (roofY - belt) * 0.5f + 0.05f, 0.04f }, black);
+			body.box({ -(W + 0.04f), roofY + 0.07f, cabFront }, { 0.05f, 0.04f, 0.07f }, black);
+		}
+
+		// --- Bumpers, skid plate, mud flaps, exhaust, mirrors ---
 		body.box({ 0, yb + 0.12f, Lz + 0.02f }, { W - 0.1f, 0.1f, 0.05f }, black);
 		body.box({ 0, yb + 0.12f, -Lz - 0.02f }, { W - 0.08f, 0.1f, 0.05f }, black);
 		body.box({ 0, yb - 0.01f, Lz - 0.6f }, { W - 0.25f, 0.02f, 0.5f }, Color{ 150, 150, 155, 255 });
+		// Grille.
+		body.box({ 0, belt - sh.noseDrop - 0.1f, Lz + 0.005f }, { W * 0.32f, 0.05f, 0.01f }, Color{ 18, 18, 20, 255 });
 		for (float sx : { 1.0f, -1.0f }) {
-			body.box({ sx * (spec.trackHalf - 0.02f), yb + 0.02f, spec.rearAxleZ - spec.wheelRadius - 0.08f }, { 0.13f, 0.14f, 0.01f }, Color{ 230, 230, 230, 255 });
-			body.box({ sx * (spec.trackHalf - 0.02f), yb + 0.02f, spec.frontAxleZ - spec.wheelRadius - 0.1f }, { 0.13f, 0.12f, 0.01f }, black);
+			float flapW = spec.style == 7 || spec.style == 8 ? 0.17f : 0.13f;
+			body.box({ sx * (spec.trackHalf - 0.02f), yb + 0.02f, spec.rearAxleZ - spec.wheelRadius - 0.08f }, { flapW, 0.15f, 0.01f }, Color{ 230, 230, 230, 255 });
+			body.box({ sx * (spec.trackHalf - 0.02f), yb + 0.02f, spec.frontAxleZ - spec.wheelRadius - 0.1f }, { flapW, 0.12f, 0.01f }, black);
 			body.box({ sx * (W + 0.06f), belt + 0.12f, cabFront - 0.1f }, { 0.05f, 0.04f, 0.06f }, bodyC);
+			body.box({ sx * (W + 0.03f), belt + 0.12f, cabFront - 0.1f }, { 0.03f, 0.012f, 0.03f }, black);
 		}
 		body.box({ -0.45f, yb + 0.02f, -Lz - 0.05f }, { 0.05f, 0.05f, 0.08f }, Color{ 90, 90, 95, 255 });
-		// Wheel arch blackouts.
+		// Wheel arches: blackout inside, plus flares.
+		const float wheelY = spec.mountY - spec.restLength + 0.08f;
 		for (int i = 0; i < 4; ++i) {
 			float sx = (i % 2 == 0) ? 1.0f : -1.0f;
 			float z = i < 2 ? spec.frontAxleZ : spec.rearAxleZ;
-			body.box({ sx * (W - 0.02f), spec.mountY - spec.restLength + spec.wheelRadius + 0.08f, z }, { 0.03f, 0.12f, spec.wheelRadius + 0.08f }, black);
+			body.box({ sx * (W - 0.02f), wheelY + spec.wheelRadius * 0.5f, z }, { 0.03f, 0.12f, spec.wheelRadius + 0.08f }, black);
+			if (sh.flare > 0.0f) {
+				float fx = sx * (W - 0.02f + sh.flare * 0.5f);
+				body.box({ fx, wheelY + spec.wheelRadius + 0.02f, z }, { sh.flare * 0.5f + 0.03f, 0.05f, spec.wheelRadius + 0.12f }, flareC);
+				for (float dz : { -1.0f, 1.0f })
+					body.box({ fx, wheelY + spec.wheelRadius * 0.45f, z + dz * (spec.wheelRadius + 0.09f) }, { sh.flare * 0.5f + 0.03f, spec.wheelRadius * 0.55f, 0.04f }, flareC);
+			}
 		}
 
 		// --- Lights ---
-		float lightY = belt - (wedge ? 0.36f : 0.2f), lightZ = Lz - 0.02f;
-		hl.box({ 0.55f, lightY, lightZ }, { 0.16f, 0.06f, 0.03f }, Color{ 255, 250, 225, 255 });
-		hr.box({ -0.55f, lightY, lightZ }, { 0.16f, 0.06f, 0.03f }, Color{ 255, 250, 225, 255 });
+		float lightY = belt - sh.noseDrop - 0.08f, lightZ = Lz - 0.02f;
+		Color lampC = { 255, 250, 225, 255 };
+		auto discZ = [](MeshBuilder& mb, Vector3 c, float r, Color col) {
+			const int n = 14;
+			for (int k = 0; k < n; ++k) {
+				float a0 = 2 * PI * k / n, a1 = 2 * PI * (k + 1) / n;
+				Vector3 p0 = { c.x + std::cos(a0) * r, c.y + std::sin(a0) * r, c.z };
+				Vector3 p1 = { c.x + std::cos(a1) * r, c.y + std::sin(a1) * r, c.z };
+				mb.tri(c, p1, p0, col);
+				// thin rim so it reads from the side
+				outwardQuad(mb, p0, p1, { p1.x, p1.y, c.z - 0.03f }, { p0.x, p0.y, c.z - 0.03f }, { c.x, c.y, c.z - 0.015f }, Color{ 50, 50, 55, 255 });
+			}
+		};
+		if (sh.roundLights) {
+			if (sh.quadLights) {
+				discZ(hl, { 0.42f, lightY, lightZ + 0.012f }, 0.075f, lampC); discZ(hl, { 0.64f, lightY, lightZ + 0.012f }, 0.075f, lampC);
+				discZ(hr, { -0.42f, lightY, lightZ + 0.012f }, 0.075f, lampC); discZ(hr, { -0.64f, lightY, lightZ + 0.012f }, 0.075f, lampC);
+			}
+			else {
+				discZ(hl, { W * 0.62f, lightY, lightZ + 0.012f }, 0.095f, lampC);
+				discZ(hr, { -W * 0.62f, lightY, lightZ + 0.012f }, 0.095f, lampC);
+			}
+		}
+		else if (sh.quadLights) {
+			hl.box({ 0.42f, lightY, lightZ }, { 0.1f, 0.055f, 0.03f }, lampC); hl.box({ 0.66f, lightY, lightZ }, { 0.1f, 0.055f, 0.03f }, lampC);
+			hr.box({ -0.42f, lightY, lightZ }, { 0.1f, 0.055f, 0.03f }, lampC); hr.box({ -0.66f, lightY, lightZ }, { 0.1f, 0.055f, 0.03f }, lampC);
+		}
+		else {
+			hl.box({ 0.55f, lightY, lightZ }, { 0.16f, 0.06f, 0.03f }, lampC);
+			hr.box({ -0.55f, lightY, lightZ }, { 0.16f, 0.06f, 0.03f }, lampC);
+		}
+		float podY = sh.bullbar ? lightY + 0.05f : lightY + 0.16f, podZ = sh.bullbar ? Lz + 0.17f : Lz + 0.07f;
 		for (int i = 0; i < 4; ++i) {
 			float x = -0.45f + i * 0.3f;
-			pod.box({ x, lightY + 0.16f, Lz + 0.07f }, { 0.11f, 0.11f, 0.03f }, Color{ 255, 248, 220, 255 });
+			discZ(pod, { x, podY, podZ + 0.01f }, 0.1f, Color{ 255, 248, 220, 255 });
 		}
-		pod.box({ 0, lightY + 0.16f, Lz + 0.03f }, { 0.62f, 0.13f, 0.02f }, black);
-		tail.box({ 0.6f, belt - 0.12f, -Lz - 0.005f }, { 0.18f, 0.05f, 0.02f }, Color{ 220, 20, 20, 255 });
-		tail.box({ -0.6f, belt - 0.12f, -Lz - 0.005f }, { 0.18f, 0.05f, 0.02f }, Color{ 220, 20, 20, 255 });
+		pod.box({ 0, podY, podZ - 0.03f }, { 0.62f, 0.12f, 0.02f }, black);
+		float tailY = belt - sh.tailDrop - 0.12f;
+		tail.box({ W * 0.68f, tailY, -Lz - 0.005f }, { 0.17f, 0.05f, 0.02f }, Color{ 220, 20, 20, 255 });
+		tail.box({ -W * 0.68f, tailY, -Lz - 0.005f }, { 0.17f, 0.05f, 0.02f }, Color{ 220, 20, 20, 255 });
 
 		// --- Wheel (centred on origin, axle along x) ---
 		const float R = spec.wheelRadius, hwW = spec.wheelWidth * 0.5f;
-		cylinderX(wheel, { 0, 0, 0 }, R, hwW, 16, Color{ 30, 30, 32, 255 }, Color{ 40, 40, 42, 255 });
-		cylinderX(wheel, { 0, 0, 0 }, R * 0.62f, hwW + 0.01f, 12, Color{ 200, 200, 205, 255 }, Color{ 210, 210, 215, 255 });
-		for (int i = 0; i < 3; ++i) {
-			Matrix m = MatrixMultiply(MatrixRotateX(i * PI / 3), MatrixTranslate(0, 0, 0));
-			wheel.boxTransformed({ hwW + 0.02f, R * 0.58f, 0.025f }, m, Color{ 120, 120, 125, 255 });
+		cylinderX(wheel, { 0, 0, 0 }, R, hwW, 22, Color{ 28, 28, 30, 255 }, Color{ 38, 38, 40, 255 });           // tyre
+		cylinderX(wheel, { 0, 0, 0 }, R * 0.97f, hwW + 0.003f, 22, Color{ 22, 22, 24, 255 }, Color{ 45, 45, 48, 255 }); // sidewall
+		cylinderX(wheel, { 0, 0, 0 }, R * 0.64f, hwW + 0.008f, 16, shade(spec.rimColor, 0.8f), shade(spec.rimColor, 0.55f)); // rim barrel
+		for (int i = 0; i < 5; ++i) {
+			float a = i * 2 * PI / 5;
+			Matrix m = MatrixMultiply(MatrixTranslate(0, R * 0.32f, 0), MatrixRotateX(a));
+			wheel.boxTransformed({ hwW + 0.014f, R * 0.3f, 0.028f }, m, spec.rimColor);
 		}
+		cylinderX(wheel, { 0, 0, 0 }, R * 0.16f, hwW + 0.02f, 10, shade(spec.rimColor, 0.9f), shade(spec.rimColor, 1.1f));   // hub cap
+		cylinderX(wheel, { 0, 0, 0 }, R * 0.5f, hwW - 0.02f, 16, Color{ 90, 90, 95, 255 }, Color{ 110, 110, 115, 255 });     // brake disc
 
 		// --- Interior (seen from the in-car cameras) ---
 		interior.box({ 0, belt + 0.02f, cabFront - 0.12f }, { W - 0.14f, 0.09f, 0.16f }, trim);           // dashboard

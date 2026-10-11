@@ -75,7 +75,10 @@ namespace rally {
 		Color stripeColor = { 220, 40, 40, 255 };
 		Color accentColor = { 30, 60, 160, 255 };
 		int number = 7;
-		int style = 0;                    // 0 = hatch (modern), 1 = wedge coupe (classic)
+		int style = 0;                    // body: 0 hatch, 1 wedge, 2 supermini, 3 saloon, 4 Group B, 5 mini, 6 WRC, 7 70s saloon, 8 raid 4x4
+		int livery = 0;                   // 0 stripes, 1 two-tone, 2 diagonal sweep, 3 racing stripes
+		Color roofColor = { 0, 0, 0, 0 }; // alpha 0 = body colour
+		Color rimColor = { 200, 200, 205, 255 };
 
 		float torqueAt(float rpm) const;
 		float maxTorque() const;

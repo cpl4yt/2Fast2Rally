@@ -80,7 +80,9 @@ namespace rally {
 				if (j.contains("bodyColor")) c.bodyColor = colorFrom(j["bodyColor"], c.bodyColor);
 				if (j.contains("stripeColor")) c.stripeColor = colorFrom(j["stripeColor"], c.stripeColor);
 				if (j.contains("accentColor")) c.accentColor = colorFrom(j["accentColor"], c.accentColor);
-				get(j, "number", c.number); get(j, "style", c.style);
+				get(j, "number", c.number); get(j, "style", c.style); get(j, "livery", c.livery);
+				if (j.contains("roofColor")) { c.roofColor = colorFrom(j["roofColor"], c.roofColor); c.roofColor.a = 255; }
+				if (j.contains("rimColor")) c.rimColor = colorFrom(j["rimColor"], c.rimColor);
 				if (c.torqueCurve.empty()) c.torqueCurve = { {1000, 180}, {3000, 280}, {5000, 320}, {7000, 260} };
 				cars.push_back(c);
 			}
