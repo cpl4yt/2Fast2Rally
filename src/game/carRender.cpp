@@ -344,7 +344,7 @@ namespace rally {
 				float a0 = 2 * PI * k / n, a1 = 2 * PI * (k + 1) / n;
 				Vector3 p0 = { c.x + std::cos(a0) * r, c.y + std::sin(a0) * r, c.z };
 				Vector3 p1 = { c.x + std::cos(a1) * r, c.y + std::sin(a1) * r, c.z };
-				mb.tri(c, p1, p0, col);
+				mb.tri(c, p0, p1, col); // faces +z (forward)
 				// thin rim so it reads from the side
 				outwardQuad(mb, p0, p1, { p1.x, p1.y, c.z - 0.03f }, { p0.x, p0.y, c.z - 0.03f }, { c.x, c.y, c.z - 0.015f }, Color{ 50, 50, 55, 255 });
 			}
@@ -410,14 +410,16 @@ namespace rally {
 		interior.box({ 0, roofY - 0.05f, cabBack + 0.75f }, { W - 0.2f, 0.025f, 0.025f }, Color{ 200, 200, 205, 255 });
 		// Crew: driver on the left (+x), co-driver on the right.
 		Color suit1 = accent, suit2 = shade(accent, 0.8f);
+		// Crew head height: under the roof whatever the body style.
+		const float hc = std::min(belt + 0.5f, roofY - 0.2f);
 		for (int seat = 0; seat < 2; ++seat) {
 			float sx = seat == 0 ? 0.38f : -0.38f;
 			Color suit = seat == 0 ? suit1 : suit2;
-			crew.box({ sx, belt + 0.12f, -0.58f }, { 0.17f, 0.24f, 0.11f }, suit);
+			crew.box({ sx, hc - 0.38f, -0.58f }, { 0.17f, 0.24f, 0.11f }, suit);
 			crew.box({ sx, belt - 0.06f, -0.28f }, { 0.15f, 0.06f, 0.2f }, suit);
 			MeshBuilder tmp;
 			// Helmet as a rough sphere (octahedron-ish).
-			Vector3 h = { sx, belt + 0.5f, -0.55f };
+			Vector3 h = { sx, hc, -0.55f };
 			float r = 0.13f;
 			Vector3 top = { h.x, h.y + r, h.z }, bot = { h.x, h.y - r, h.z };
 			Vector3 ring[8];
@@ -428,7 +430,7 @@ namespace rally {
 				outwardQuad(crew, a, b, top, top, h, helmet);
 				outwardQuad(crew, a, b, bot, bot, h, helmet);
 			}
-			crew.box({ sx, belt + 0.49f, -0.44f }, { 0.09f, 0.04f, 0.02f }, Color{ 20, 20, 25, 255 }); // visor
+			crew.box({ sx, hc - 0.01f, -0.44f }, { 0.09f, 0.04f, 0.02f }, Color{ 20, 20, 25, 255 }); // visor
 			if (seat == 1) crew.box({ sx, belt + 0.16f, -0.32f }, { 0.1f, 0.01f, 0.07f }, Color{ 250, 250, 240, 255 }); // pace-note book
 		}
 		// Steering wheel (origin at hub, in the x-y plane).
@@ -467,8 +469,8 @@ namespace rally {
 		q.quad({ 0, -0.5f, -0.5f }, { 0, -0.5f, 0.5f }, { 0, 0.5f, 0.5f }, { 0, 0.5f, -0.5f }, WHITE, { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 });
 		numberQuad_ = q.upload();
 
-		driverEye_ = { 0.38f, belt + 0.47f, -0.3f };
-		codriverEye_ = { -0.38f, belt + 0.45f, -0.32f };
+		driverEye_ = { 0.38f, hc - 0.03f, -0.3f };
+		codriverEye_ = { -0.38f, hc - 0.05f, -0.32f };
 		bonnetEye_ = { 0.0f, belt + 0.34f, cabFront + 0.02f };
 		spin_[0] = spin_[1] = spin_[2] = spin_[3] = 0;
 		built_ = true;

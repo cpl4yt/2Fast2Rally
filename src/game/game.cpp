@@ -15,7 +15,7 @@ namespace rally {
 		auto_ = opts;
 		Settings& cfg = settings();
 		firstRun_ = !cfg.load(kSettingsPath);
-		bool automated = auto_.selfTest || auto_.menuShot || auto_.netHost || auto_.netJoin || auto_.screens;
+		bool automated = auto_.selfTest || auto_.menuShot || auto_.netHost || auto_.netJoin || auto_.screens || auto_.carShots;
 		if (automated) {
 			firstRun_ = false;
 			cfg.fullscreen = false;
@@ -231,6 +231,18 @@ namespace rally {
 		// --- Automation ---
 		autoTimer_ += dt;
 		if (!pendingShot_.empty()) { takeScreenshot(pendingShot_); pendingShot_.clear(); }
+		if (auto_.carShots) {
+			// QA: every car on the turntable, from a fixed 3/4 angle.
+			qaTimer_ += dt;
+			menuSpin_ = 0.75f;
+			if (qaStep_ == 0 && qaTimer_ < 0.1f) menuCarRender_.build(cars_[0]);
+			if (qaTimer_ > 0.8f) {
+				takeScreenshot("car_" + std::to_string(qaStep_) + ".png");
+				qaTimer_ = 0;
+				if (++qaStep_ >= (int)cars_.size()) quit_ = true;
+				else menuCarRender_.build(cars_[qaStep_]);
+			}
+		}
 		if (auto_.screens) {
 			// QA: visit every menu screen and screenshot it.
 			static const char* names[] = { "main", "solo", "host", "join", "lobby", "set_gfx", "set_audio", "set_controls", "set_game", "board", "howto", "credits", "editor" };

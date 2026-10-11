@@ -38,6 +38,7 @@ namespace rally {
 		bool screens = false;         // screenshot every menu screen and exit
 		bool rally = false;           // self test: run the full rally
 		bool hTest = false;           // self test: scripted H-pattern + clutch driver
+		bool carShots = false;        // screenshot every car on the menu turntable
 	};
 
 	struct NoteCallState {
