@@ -15,11 +15,12 @@ namespace rally {
 		auto_ = opts;
 		Settings& cfg = settings();
 		firstRun_ = !cfg.load(kSettingsPath);
-		bool automated = auto_.selfTest || auto_.menuShot || auto_.netHost || auto_.netJoin || auto_.screens || auto_.carShots;
+		bool automated = auto_.selfTest || auto_.menuShot || auto_.netHost || auto_.netJoin || auto_.screens || auto_.carShots || auto_.gallery;
 		if (automated) {
 			firstRun_ = false;
 			cfg.fullscreen = false;
 			cfg.windowW = 1280; cfg.windowH = 720;
+			if (auto_.hires || auto_.gallery) { cfg.windowW = 1920; cfg.windowH = 1080; cfg.msaa = true; cfg.showFps = false; cfg.particleQuality = 2; cfg.drawDistance = std::max(cfg.drawDistance, 600.0f); }
 		}
 
 		unsigned flags = FLAG_WINDOW_RESIZABLE;
@@ -87,9 +88,10 @@ namespace rally {
 		stageIndex_ = std::clamp(auto_.stage, 0, std::max(0, (int)stageDefs_.size() - 1));
 		carIndex_ = std::clamp(auto_.car, 0, std::max(0, (int)cars_.size() - 1));
 		weather_ = (Weather)std::clamp(auto_.weather, 0, 2);
-		timeOfDay_ = (TimeOfDay)std::clamp(auto_.timeOfDay, 0, 1);
+		timeOfDay_ = (TimeOfDay)std::clamp(auto_.timeOfDay, 0, 2);
 
 		if (firstRun_) openScreen(Screen::HowToPlay);
+		if (auto_.gallery) { galleryScene_ = auto_.galleryPart; galleryStartScene(); }
 		if (auto_.selfTest) {
 			if (auto_.rally) { startRally(std::clamp(auto_.stage, 0, std::max(0, (int)eventNames_.size() - 1))); stageIndex_ = rally_.stageAt(0); }
 			startStage(stageIndex_, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
@@ -231,6 +233,34 @@ namespace rally {
 		// --- Automation ---
 		autoTimer_ += dt;
 		if (!pendingShot_.empty()) { takeScreenshot(pendingShot_); pendingShot_.clear(); }
+		if (auto_.gallery && screen_ == Screen::Stage && run_.phase == RunPhase::Running) {
+			// Shots at these stage times; the camera is set up a second before each.
+			static const float times[] = { 6, 13, 20, 27, 34, 41 };
+			static const int cams[] = { 0, 2, 1, 4, -2, -3 };
+			static const char* camNames[] = { "front", "roadside", "side", "lowrear", "hud", "hud2" };
+			if (galleryShot_ < 6) {
+				float T = times[galleryShot_];
+				if (!galleryCamSet_ && run_.stageTime >= T - 1.0f) {
+					int cm = cams[galleryShot_];
+					galleryCam_ = cm >= 0 ? cm : -1;
+					hideHud_ = cm >= 0;
+					if (cm == -2) { camMode_ = 0; navView_ = 0; camPos_ = { 1e5f, 1e5f, 1e5f }; }
+					if (cm == -3) { camMode_ = 3; navView_ = (galleryScene_ % 2) ? 3 : 2; }
+					galleryCamSet_ = true;
+				}
+				if (galleryCamSet_ && run_.stageTime >= T) {
+					char nm[96];
+					std::snprintf(nm, sizeof nm, "gallery_%02d_%s_%s.png", galleryScene_, stage_.def.id.c_str(), camNames[galleryShot_]);
+					takeScreenshot(nm);
+					++galleryShot_;
+					galleryCamSet_ = false;
+				}
+			}
+			else {
+				galleryScene_ += std::max(1, auto_.galleryParts);
+				galleryStartScene();
+			}
+		}
 		if (auto_.carShots) {
 			// QA: every car on the turntable, from a fixed 3/4 angle.
 			qaTimer_ += dt;
@@ -464,5 +494,33 @@ namespace rally {
 			setMessage(e.text, ui::kAccent);
 			break;
 		}
+	}
+}
+
+namespace rally {
+	// Gallery scenes: stage, car, weather, time of day, navigator view.
+	namespace {
+		struct GalleryScene { int stage, car, weather, tod; bool nav; };
+		const GalleryScene kGallery[] = {
+			{ 0, 0, 0, 0, false }, { 1, 6, 0, 1, false }, { 2, 4, 0, 0, false }, { 3, 8, 0, 0, true },
+			{ 4, 3, 2, 0, false }, { 6, 7, 0, 0, false }, { 10, 1, 0, 1, false }, { 12, 3, 1, 0, false },
+			{ 15, 5, 0, 0, true }, { 18, 6, 0, 2, false }, { 21, 8, 0, 1, false }, { 7, 0, 2, 1, false },
+			{ 23, 4, 1, 0, true }, { 14, 7, 0, 2, false }, { 19, 2, 2, 0, false }, { 5, 5, 0, 1, false },
+		};
+	}
+
+	void Game::galleryStartScene() {
+		const int n = (int)(sizeof(kGallery) / sizeof(kGallery[0]));
+		if (galleryScene_ >= n) { quit_ = true; return; }
+		const GalleryScene& g = kGallery[galleryScene_];
+		int stage = std::min(g.stage, (int)stageDefs_.size() - 1);
+		int car = std::min(g.car, (int)cars_.size() - 1);
+		startStage(stage, car, (Weather)g.weather, (TimeOfDay)g.tod, g.nav ? Role::Navigator : Role::Driver, false);
+		run_.aiDriver = true;
+		galleryShot_ = 0;
+		galleryCamSet_ = false;
+		galleryCam_ = -1;
+		hideHud_ = false;
+		autoTimer_ = 0;
 	}
 }

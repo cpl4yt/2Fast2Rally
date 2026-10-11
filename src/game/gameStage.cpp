@@ -274,7 +274,7 @@ namespace rally {
 				}
 			}
 			// Navigator auto-test: call notes like the AI would.
-			if ((auto_.netJoin || auto_.selfTest) && run_.phase == RunPhase::Running && !run_.paused) aiCodriver();
+			if ((auto_.netJoin || auto_.selfTest || auto_.gallery) && run_.phase == RunPhase::Running && !run_.paused) aiCodriver();
 			if (!run_.online && run_.aiDriver && (run_.phase == RunPhase::Countdown) && !run_.paused) {
 				// keep the practice car still during the countdown
 				accumulator_ = 0;
@@ -293,7 +293,7 @@ namespace rally {
 		}
 		updateCamera(dt);
 		drawStage3D(run_.paused ? 0.0f : dt);
-		drawHud();
+		if (!hideHud_) drawHud();
 	}
 
 	// ------------------------------------------------------------------
@@ -747,6 +747,26 @@ namespace rally {
 		float speed = Vector3Length(v.velocity);
 		float fov = settings().fov + std::clamp(speed - 15.0f, 0.0f, 30.0f) * 0.2f;
 
+		// Gallery / photo cameras (marketing screenshots).
+		if (galleryCam_ >= 0) {
+			Vector3 f = Vector3Normalize({ fwd.x, 0, fwd.z });
+			Vector3 rt = { -f.z, 0, f.x }; // car's right, flattened
+			Vector3 c = v.position;
+			Vector3 pos = c, look = Vector3Add(c, { 0, 0.5f, 0 });
+			float gf = 45.0f;
+			switch (galleryCam_) {
+			case 0: pos = Vector3Add(Vector3Add(c, Vector3Scale(f, 7.5f)), Vector3Add(Vector3Scale(rt, 3.2f), { 0, 0.9f, 0 })); break;           // low front three-quarter
+			case 1: pos = Vector3Add(Vector3Add(c, Vector3Scale(rt, -7.5f)), Vector3Add(Vector3Scale(f, 1.5f), { 0, 1.3f, 0 })); break;         // side
+			case 2: { RoadSample rs = stage_.sampleAt(run_.progress + 24.0f);                                                              // roadside, car approaching
+				pos = { rs.pos.x + rs.right.x * (stage_.halfWidth() + 3.5f), rs.pos.y + 1.5f, rs.pos.z + rs.right.y * (stage_.halfWidth() + 3.5f) }; gf = 38.0f; } break;
+			case 3: pos = Vector3Add(Vector3Subtract(c, Vector3Scale(f, 15.0f)), { 0, 8.0f, 0 }); look = Vector3Add(c, Vector3Scale(f, 8.0f)); gf = 55.0f; break; // helicopter
+			default: pos = Vector3Add(Vector3Subtract(c, Vector3Scale(f, 5.5f)), Vector3Add(Vector3Scale(rt, 1.6f), { 0, 0.45f, 0 })); look = Vector3Add(Vector3Add(c, Vector3Scale(f, 12.0f)), { 0, 0.6f, 0 }); gf = 60.0f; break; // low rear
+			}
+			pos.y = std::max(pos.y, stage_.heightAt(pos.x, pos.z) + 0.4f);
+			cam_.position = pos; cam_.target = look; cam_.up = { 0, 1, 0 }; cam_.fovy = gf; cam_.projection = CAMERA_PERSPECTIVE;
+			return;
+		}
+
 		auto attach = [&](Vector3 local, float pitchDown) {
 			Vector3 eye = Vector3Add(v.position, Vector3Transform(local, rot));
 			Vector3 dir = Vector3Normalize(Vector3Subtract(fwd, Vector3Scale(up, pitchDown)));
@@ -890,7 +910,7 @@ namespace rally {
 		world_.drawSky(cam_);
 		BeginMode3D(cam_);
 		world_.drawStage(cam_, settings().drawDistance);
-		bool interior = (run_.role == Role::Driver && camMode_ >= 2) || (run_.role == Role::Navigator && navView_ != 1);
+		bool interior = galleryCam_ < 0 && ((run_.role == Role::Driver && camMode_ >= 2) || (run_.role == Role::Navigator && navView_ != 1));
 		carRender_.draw(world_, v, dt, world_.env().lampIntensity > 0.0f, interior ? CarView::Interior : CarView::Exterior);
 		world_.drawWater();
 		{

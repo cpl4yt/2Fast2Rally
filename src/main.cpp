@@ -27,6 +27,9 @@ int main(int argc, char** argv) {
 		else if (a == "--rally") opts.rally = true;
 		else if (a == "--htest") opts.hTest = true;
 		else if (a == "--carshots") opts.carShots = true;
+		else if (a == "--gallery") opts.gallery = true;
+		else if (a == "--hires") opts.hires = true;
+		else if (a == "--part") { opts.galleryPart = next(0); opts.galleryParts = (i + 1 < argc) ? std::atoi(argv[++i]) : 1; }
 		else if (a == "--genstages") opts.genStages = true;
 		else if (a == "--stage") opts.stage = next(0);
 		else if (a == "--car") opts.car = next(0);
@@ -38,7 +41,7 @@ int main(int argc, char** argv) {
 	}
 
 	// Automated runs log to their own file so several can run side by side.
-	bool automated = opts.selfTest || opts.menuShot || opts.netHost || opts.netJoin || opts.screens || opts.carShots;
+	bool automated = opts.selfTest || opts.menuShot || opts.netHost || opts.netJoin || opts.screens || opts.carShots || opts.gallery;
 	rally::log::init(automated ? "logs/" + opts.shotPrefix + ".log" : "logs/rally.log");
 	rally::crash::install();
 

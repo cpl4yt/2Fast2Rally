@@ -39,6 +39,9 @@ namespace rally {
 		bool rally = false;           // self test: run the full rally
 		bool hTest = false;           // self test: scripted H-pattern + clutch driver
 		bool carShots = false;        // screenshot every car on the menu turntable
+		bool gallery = false;         // marketing screenshots: many scenes x camera angles
+		bool hires = false;           // automated runs at 1920x1080
+		int galleryPart = 0, galleryParts = 1; // split the gallery across processes
 	};
 
 	struct NoteCallState {
@@ -283,6 +286,11 @@ namespace rally {
 		// Self test bookkeeping
 		double fpsFrames_ = 0, fpsTime_ = 0, fpsMin_ = 1e9;
 		float aiStuckTimer_ = 0;
+		int galleryCam_ = -1;         // cinematic camera for gallery shots (-1 = normal)
+		bool hideHud_ = false;
+		int galleryScene_ = 0, galleryShot_ = 0;
+		bool galleryCamSet_ = false;
+		void galleryStartScene();
 		bool edgesConsumed_ = false;
 		float aiReverse_ = 0, aiSlowTimer_ = 0;
 		float ffbKick_ = 0, ffbNoise_ = 0;
