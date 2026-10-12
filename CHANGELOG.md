@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0 — in progress
+
+**New**
+- **Drop-in asset slots** (see `ASSETS.md`): recorded co-driver voice, engine packs
+  (RPM loops crossfaded and pitch-shifted, on/off throttle), surface/wind/rain loops,
+  impact/glass/shift/stone one-shots, menu sounds, stage cues, ambience + crowd, a music
+  playlist and photo textures for tarmac/snow/mud. Anything missing keeps the built-in sound/texture.
+- **Tyre marks**: black skid marks on tarmac when sliding, ruts in gravel, snow, mud and grass.
+- **In-car head movement**: the camera leans with braking, acceleration and cornering,
+  shakes on rough gravel and jolts on impacts (*In-car head movement* slider, Settings -> Graphics).
+- Stages fade in from black.
+- Cars can share an engine recording via `"sound"` in `cars.json`.
+- `--audiodump` (with `--selftest`): records the car-audio mix to `logs/<shots>_audio.wav`.
+
 ## 1.0.0 — first release
 
 **New**

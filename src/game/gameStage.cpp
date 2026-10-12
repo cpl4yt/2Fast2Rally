@@ -92,7 +92,12 @@ namespace rally {
 		car_.antiFlip = settings().antiFlip;
 		car_.engineEnabled = false;
 		carRender_.build(cars_[carIndex_]);
+		synth::loadEnginePack("res/audio/cars/" + cars_[carIndex_].soundPack);
+		heardEngine_ = false; heardLights_ = 0; stoneTimer_ = 0; cheerCooldown_ = 0;
+		headPrevVel_ = headOff_ = headVel_ = headJitter_ = {}; headShake_ = 0; headSeenImpact_ = 0;
+		fadeIn_ = 1.3f;
 		particles_.clear();
+		tyreMarks_.clear();
 		snapshots_.clear();
 		accumulator_ = 0;
 		seenBackfire_ = seenShift_ = seenImpact_ = 0;
@@ -193,10 +198,10 @@ namespace rally {
 			case RunPhase::Countdown: {
 				run_.countdown -= dt;
 				int sec = (int)std::ceil(run_.countdown);
-				if (sec != run_.lastBeep && sec <= 3 && sec >= 1) { voice_.beep(false); run_.lastBeep = sec; }
+				if (sec != run_.lastBeep && sec <= 3 && sec >= 1) { cue("beep", [&] { voice_.beep(false); }); run_.lastBeep = sec; }
 				if (run_.countdown <= 0.0f) {
 					run_.phase = RunPhase::Running;
-					voice_.beep(true);
+					cue("go", [&] { voice_.beep(true); });
 					car_.engineEnabled = true;
 					setMessage("GO!", ui::kGood, 1.2f);
 				}
@@ -290,6 +295,7 @@ namespace rally {
 			if (driver) { if (run_.backfireSeq != seenBackfire_) { backfire = true; } }
 			particles_.emitForCar(dv, cars_[carIndex_], dt, cfg.particleQuality, backfire);
 			particles_.update(dt);
+			tyreMarks_.update(dv, cars_[carIndex_], [this](float x, float z) { return stage_.visualHeightAt(x, z); });
 		}
 		updateCamera(dt);
 		if (cockpitCluster()) {
@@ -302,6 +308,10 @@ namespace rally {
 		}
 		drawStage3D(run_.paused ? 0.0f : dt);
 		if (!hideHud_) drawHud();
+		if (fadeIn_ > 0.0f) {
+			DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(BLACK, std::min(1.0f, fadeIn_)));
+			fadeIn_ -= dt * 1.4f;
+		}
 	}
 
 	// ------------------------------------------------------------------
@@ -439,6 +449,7 @@ namespace rally {
 				if (!run_.online || run_.role == Role::Navigator) setMessage(msg, c, 3.0f);
 				else setMessage("SPLIT " + std::to_string(run_.splitIndex + 1), ui::kAccent, 2.0f);
 				run_.splitIndex++;
+				cue("split");
 			}
 			// Finish.
 			if (run_.progress >= stage_.finishS && std::fabs(run_.lateral) < hw + 15.0f) finishRun();
@@ -453,6 +464,7 @@ namespace rally {
 					run_.cuts++;
 					run_.penalties += 2.0;
 					setMessage("Corner cut  +2s", ui::kBad, 2.0f);
+					cue("penalty");
 				}
 				run_.lastOnRoadS = run_.progress;
 				run_.offRoadTimer = 0.0f;
@@ -495,6 +507,7 @@ namespace rally {
 		run_.lostTimer = 0;
 		run_.lastOnRoadS = s;
 		if (penalty && run_.phase == RunPhase::Running) {
+			cue("penalty");
 			run_.penalties += 5.0;
 			run_.resets++;
 			setMessage(std::string(why) + "  +5s", ui::kBad, 2.5f);
@@ -510,6 +523,7 @@ namespace rally {
 		run_.finishTime = run_.stageTime + run_.penalties;
 		setMessage("FINISH  " + ui::formatTime(run_.finishTime), ui::kAccent, 4.0f);
 		voice_.sayOne("finished");
+		cue("finish");
 		if (run_.online && run_.role == Role::Driver) {
 			session_.sendStageEvent({ {"kind", "finish"}, {"stageTime", run_.stageTime}, {"penalties", run_.penalties},
 				{"resets", run_.resets}, {"cuts", run_.cuts}, {"split0", run_.splitTimes[0]}, {"split1", run_.splitTimes[1]} });
@@ -703,6 +717,7 @@ namespace rally {
 		if (p.splitIndex > run_.splitIndex) {
 			int idx = p.splitIndex - 1;
 			run_.splitIndex = p.splitIndex;
+			cue("split");
 			run_.splitTimes[0] = p.splitTimes[0];
 			run_.splitTimes[1] = p.splitTimes[1];
 			auto best = leaderboard_.bestSplits(stage_.def.id);
@@ -775,7 +790,32 @@ namespace rally {
 			return;
 		}
 
+		// Head movement for the in-car views: the head lags the car's
+		// acceleration (spring-damper), jiggles on rough ground and jolts on impacts.
+		{
+			float k = settings().headMovement;
+			Vector3 accel = dt > 1e-4f ? Vector3Scale(Vector3Subtract(v.velocity, headPrevVel_), 1.0f / dt) : Vector3{};
+			headPrevVel_ = v.velocity;
+			if (Vector3Length(accel) > 120.0f) accel = {};   // resets / teleports
+			Matrix inv = MatrixTranspose(rot);
+			Vector3 la = Vector3Transform(accel, inv);         // car-local acceleration
+			Vector3 target = { std::clamp(-la.x * 0.004f, -0.05f, 0.05f), std::clamp(-la.y * 0.002f, -0.03f, 0.03f), std::clamp(-la.z * 0.004f, -0.05f, 0.05f) };
+			float st = std::min(dt, 0.05f);
+			Vector3 force = Vector3Subtract(Vector3Scale(Vector3Subtract(target, headOff_), 90.0f), Vector3Scale(headVel_, 12.0f));
+			headVel_ = Vector3Add(headVel_, Vector3Scale(force, st));
+			headOff_ = Vector3Add(headOff_, Vector3Scale(headVel_, st));
+			if (run_.impactSeq != headSeenImpact_) { headSeenImpact_ = run_.impactSeq; headShake_ = std::max(headShake_, run_.impactStrength * 0.05f); }
+			int loose = 0;
+			for (int i = 0; i < 4; ++i) if ((v.wheelContact & (1 << i)) && surfaceProps((Surface)v.wheelSurface[i]).loose) ++loose;
+			float rough = (loose / 4.0f) * std::min(1.0f, speed / 30.0f) * 0.004f;
+			float sh = headShake_ + rough;
+			headJitter_ = { (GetRandomValue(-100, 100) / 100.0f) * sh, (GetRandomValue(-100, 100) / 100.0f) * sh, 0 };
+			headShake_ *= std::max(0.0f, 1.0f - dt * 6.0f);
+			if (k <= 0.0f) { headOff_ = headVel_ = headJitter_ = {}; }
+		}
 		auto attach = [&](Vector3 local, float pitchDown) {
+			float k = settings().headMovement;
+			local = Vector3Add(local, Vector3Scale(Vector3Add(headOff_, headJitter_), k));
 			Vector3 eye = Vector3Add(v.position, Vector3Transform(local, rot));
 			Vector3 dir = Vector3Normalize(Vector3Subtract(fwd, Vector3Scale(up, pitchDown)));
 			if (lookBack) dir = Vector3Negate(dir);
@@ -809,7 +849,6 @@ namespace rally {
 	}
 
 	void Game::updateAudio(float dt) {
-		(void)dt;
 		const CarVisual& v = displayCar();
 		const CarSpec& spec = cars_[carIndex_];
 		Settings& cfg = settings();
@@ -839,11 +878,49 @@ namespace rally {
 		p.snow = std::clamp(snow, 0.0f, 1.0f);
 		p.grass = std::clamp(grass, 0.0f, 1.0f);
 		p.rain = (world_.env().precipitation && !world_.env().snowfall) ? 1.0f : 0.0f;
+		int onTarmac = 0;
+		for (int i = 0; i < 4; ++i) if ((v.wheelContact & (1 << i)) && (Surface)v.wheelSurface[i] == Surface::Tarmac) ++onTarmac;
+		p.tarmac = onTarmac / 4.0f;
 		p.engineVolume = cfg.engineVolume;
 		p.effectsVolume = cfg.effectsVolume;
-		p.engineOn = true;
+		bool localCar = run_.role == Role::Driver || run_.aiDriver;
+		bool engineOn = localCar ? car_.engineRunning() : true;
+		p.engineOn = engineOn;
 		p.interior = (run_.role == Role::Driver && camMode_ >= 2) || (run_.role == Role::Navigator && navView_ != 1);
 		synth::setParams(p);
+
+		// Recorded one-shots for events the synth has no sound for.
+		if (localCar && engineOn != heardEngine_) synth::playEffect(engineOn ? "starter" : "stall");
+		heardEngine_ = engineOn;
+		if (v.lightsBroken & ~heardLights_) synth::playEffect("glass", 0.9f);
+		heardLights_ = v.lightsBroken;
+		if (p.gravel > 0.2f && p.speed > 8.0f) {
+			stoneTimer_ -= dt;
+			if (stoneTimer_ <= 0.0f) {
+				synth::playEffect("stones", 0.25f + 0.5f * std::min(1.0f, p.speed / 35.0f));
+				stoneTimer_ = GetRandomValue(8, 60) / 100.0f / (0.5f + p.gravel);
+			}
+		}
+
+		// Ambience bed for the stage's setting, and the crowd near spectator corners.
+		{
+			const Environment& env = world_.env();
+			std::string base = stage_.def.environment;
+			const char* tod = env.night ? "_night" : "_day";
+			std::string amb;
+			for (std::string c : { base + tod, base, std::string(tod + 1) }) if (sfx_.hasLoop(c)) { amb = c; break; }
+			float muffle = p.interior ? 0.55f : 1.0f;
+			sfx_.setAmbience(amb, cfg.effectsVolume * 0.5f * muffle * (run_.paused ? 0.0f : 1.0f));
+			float nearest = 1e9f;
+			for (float s : stage_.spectatorS) nearest = std::min(nearest, std::fabs(s - run_.progress));
+			float crowd = std::clamp(1.0f - nearest / 140.0f, 0.0f, 1.0f);
+			sfx_.setCrowd(crowd * crowd * cfg.effectsVolume * 0.8f * muffle * (run_.paused ? 0.0f : 1.0f));
+			if (nearest < 25.0f && p.speed > 12.0f && cheerCooldown_ <= 0.0f) {
+				sfx_.play("cheer", cfg.effectsVolume * 0.8f * muffle, 0.05f);
+				cheerCooldown_ = 8.0f;
+			}
+			cheerCooldown_ = std::max(0.0f, cheerCooldown_ - dt);
+		}
 		bool overlayPause = run_.paused;
 		synth::setPaused(overlayPause);
 
@@ -918,6 +995,9 @@ namespace rally {
 		world_.drawSky(cam_);
 		BeginMode3D(cam_);
 		world_.drawStage(cam_, settings().drawDistance);
+		const Environment& envL = world_.env();
+		float sceneLight = std::clamp(0.3f * (envL.ambient.x + envL.ambient.y + envL.ambient.z) + 0.25f * (envL.sunColor.x + envL.sunColor.y + envL.sunColor.z), 0.12f, 1.0f);
+		tyreMarks_.draw(cam_, sceneLight);
 		bool interior = galleryCam_ < 0 && ((run_.role == Role::Driver && camMode_ >= 2) || (run_.role == Role::Navigator && navView_ != 1));
 		carRender_.draw(world_, v, dt, world_.env().lampIntensity > 0.0f, interior ? CarView::Interior : CarView::Exterior);
 		if (cockpitCluster() && dashRT_.id) carRender_.drawCluster(world_, v, dashRT_.texture);

@@ -55,7 +55,8 @@ namespace rally {
 		if (!world_.init()) return false;
 		synth::init();
 		synth::setPaused(true);
-		voice_.load("res/audio/notes");
+		synth::loadEffects("res/audio/sfx");
+		voice_.load("res/audio/notes", "res/audio/codriver");
 
 		// Stages: generate any missing defaults (into the source tree too when
 		// running from build/, so the generated layouts can be committed).
@@ -75,11 +76,11 @@ namespace rally {
 		loadContent();
 		leaderboard_.load("saves/leaderboard.json");
 
-		if (FileExists("res/audio/music/menu.mp3")) {
-			menuMusic_ = LoadMusicStream("res/audio/music/menu.mp3");
-			musicLoaded_ = menuMusic_.frameCount > 0;
-			if (musicLoaded_) { SetMusicVolume(menuMusic_, cfg.musicVolume); PlayMusicStream(menuMusic_); }
-		}
+		sfx_.load("res/audio");
+		ui::setSoundHook([this](ui::SoundEvent e) {
+			const char* name = e == ui::SoundEvent::Select ? "click" : e == ui::SoundEvent::Move ? "move" : "back";
+			sfx_.play(name, settings().effectsVolume * 0.8f, 0.03f);
+		});
 		if (!cars_.empty()) menuCarRender_.build(cars_[0]);
 		hostName_ = cfg.playerName;
 		joinAddress_ = cfg.lastJoinAddress;
@@ -96,6 +97,7 @@ namespace rally {
 			if (auto_.rally) { startRally(std::clamp(auto_.stage, 0, std::max(0, (int)eventNames_.size() - 1))); stageIndex_ = rally_.stageAt(0); }
 			startStage(stageIndex_, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
 			run_.aiDriver = true;
+			if (auto_.audioDump) synth::startCapture();
 		}
 		else if (auto_.netHost) {
 			session_.host((uint16_t)cfg.port, "HostBot");
@@ -147,8 +149,9 @@ namespace rally {
 		if (dashRT_.id) UnloadRenderTexture(dashRT_);
 		if (logo_.id) UnloadTexture(logo_);
 		carRender_.unload();
-		if (musicLoaded_) UnloadMusicStream(menuMusic_);
+		sfx_.unload();
 		voice_.unload();
+		if (auto_.audioDump) synth::stopCapture("logs/" + auto_.shotPrefix + "_audio.wav");
 		synth::shutdown();
 		world_.shutdown();
 		ui::shutdown();
@@ -198,10 +201,9 @@ namespace rally {
 		pollNetwork();
 
 		bool inStage = screen_ == Screen::Stage;
-		if (musicLoaded_) {
-			SetMusicVolume(menuMusic_, cfg.musicVolume * (inStage || screen_ == Screen::Editor ? 0.0f : 1.0f));
-			UpdateMusicStream(menuMusic_);
-		}
+		sfx_.setMusicVolume(cfg.musicVolume * (inStage || screen_ == Screen::Editor ? 0.0f : 1.0f));
+		if (!inStage) { sfx_.setAmbience("", 0.0f); sfx_.setCrowd(0.0f); }
+		sfx_.update(dt);
 		voice_.setVolume(cfg.voiceVolume);
 		voice_.update(dt);
 		if (!inStage) { synth::setPaused(true); ffb::stopAll(); }

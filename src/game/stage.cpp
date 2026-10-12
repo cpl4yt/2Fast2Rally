@@ -427,6 +427,27 @@ namespace rally {
 		return gridHeight(x, z);
 	}
 
+	float Stage::visualHeightAt(float x, float z) const {
+		float g = heightAt(x, z);
+		int k = cellIndex(x, z);
+		if (k < 0 || roadIdx[k] < 0) return g;
+		int idx = roadIdx[k];
+		const RoadSample& s = samples[idx];
+		float dx = x - s.pos.x, dz = z - s.pos.z;
+		float lat = std::fabs(dx * s.right.x + dz * s.right.y);
+		float hw = halfWidth();
+		if (lat > hw) return lat <= hw + 2.8f ? g + 0.03f : g;   // verge strips
+		// Along-road position between this sample and its neighbour, for the grade.
+		float along = dx * s.dir.x + dz * s.dir.y;
+		int j = along >= 0 ? idx + 1 : idx - 1;
+		float y = s.pos.y;
+		if (j >= 0 && j < (int)samples.size()) {
+			float ds = std::fabs(samples[j].s - s.s);
+			if (ds > 1e-3f) y += (samples[j].pos.y - s.pos.y) * std::min(1.0f, std::fabs(along) / ds);
+		}
+		return y + 0.04f - 0.07f * (lat / hw);   // crown: matches the road mesh
+	}
+
 	Surface Stage::surfaceAt(float x, float z) const {
 		int k = cellIndex(x, z);
 		if (k < 0) return offroad;

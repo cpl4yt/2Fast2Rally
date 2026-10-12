@@ -10,7 +10,8 @@ namespace rally {
 	// trailing silence trimmed so calls sound continuous.
 	class Voice {
 	public:
-		void load(const std::string& dir);
+		// dir: TTS clips; humanDir: recorded co-driver clips (preferred per word).
+		void load(const std::string& dir, const std::string& humanDir = std::string());
 		void unload();
 		void say(const std::vector<std::string>& words, bool interrupt = false);
 		void sayOne(const std::string& word, bool interrupt = false) { say({ word }, interrupt); }
@@ -25,6 +26,7 @@ namespace rally {
 
 	private:
 		std::unordered_map<std::string, Sound> clips_;
+		std::unordered_map<std::string, bool> humanClip_;
 		std::deque<std::string> queue_;
 		Sound* current_ = nullptr;
 		bool playing_ = false;

@@ -107,8 +107,9 @@ automatically if it isn't installed).
 - **Logo / icon**: `res/logo.png` is shown on the main menu; `tools/genicon.ps1 -FromPng my.png`
   rebuilds `res/icon.png` + `res/icon.ico` (exe icon; rebuild after). `tools/maketransparent.ps1`
   clears a white background.
-- **Co-driver voice**: `tools/genvoice.ps1` regenerates `res/audio/notes/*.wav`
-  with Windows text-to-speech. Drop in your own recordings with the same names.
+- **Sounds, voice & textures**: `ASSETS.md` lists every drop-in slot (recorded co-driver,
+  engine packs, surface sounds, ambience, menu sounds, textures) with file names and specs.
+  `tools/genvoice.ps1` regenerates the text-to-speech fallback voice in `res/audio/notes/`.
 
 ## Testing hooks
 ```
@@ -127,13 +128,13 @@ screenshots, then exits. Crashes write `logs/crash-*.txt` with a stack trace.
 src/core/   physicsEngine (from Prairie), networkManager (from Prairie), audioSynth,
             input, settings, ui, log, crashHandler, noise
 src/game/   vehicle (raycast suspension + tyre model), stage (spline road, terrain,
-            props), stageGen, paceNotes, voice, world (renderer), carRender,
-            particles, session (co-op protocol), leaderboard, game* (screens), editor
+            props), stageGen, paceNotes, voice, sfx, world (renderer), carRender,
+            particles, tyreMarks, session (co-op protocol), leaderboard, game* (screens), editor
 res/        models & textures (from Prairie), stages, cars, voice clips, fonts
 ```
 
 ## Known limitations
-- The co-driver voice is text-to-speech, not a recorded co-driver (drop your own recordings into `res/audio/notes`).
+- Until recordings are added (see `ASSETS.md`), the co-driver voice is text-to-speech and the car sounds are synthesised.
 - Online play is direct IP only: no matchmaking or relay server yet.
 - Car models are procedural low-poly.
 - Force feedback needs a DirectInput FFB wheel (Logitech, Thrustmaster, Fanatec...); the game takes exclusive FFB control while running.

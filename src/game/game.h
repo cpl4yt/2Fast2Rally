@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <deque>
+#include <functional>
 #include "core/physicsEngine.h"
 #include "core/settings.h"
 #include "core/audioSynth.h"
@@ -11,9 +12,11 @@
 #include "game/stage.h"
 #include "game/paceNotes.h"
 #include "game/voice.h"
+#include "game/sfx.h"
 #include "game/world.h"
 #include "game/carRender.h"
 #include "game/particles.h"
+#include "game/tyreMarks.h"
 #include "game/session.h"
 #include "game/leaderboard.h"
 
@@ -33,6 +36,7 @@ namespace rally {
 		float timeLimit = 400.0f;
 		std::string shotPrefix = "screenshot";
 		bool genStages = false;
+		bool audioDump = false;      // record the car-audio mix to logs/<shots>_audio.wav
 		int navView = -1;             // force a navigator view (for screenshots)
 		bool asNavigator = false;     // self test as the navigator (AI driver)
 		bool screens = false;         // screenshot every menu screen and exit
@@ -179,12 +183,17 @@ namespace rally {
 		CarRenderer carRender_;
 		CarRenderer menuCarRender_;
 		Particles particles_;
+		TyreMarks tyreMarks_;
 		Voice voice_;
 		Session session_;
 		Leaderboard leaderboard_;
-		Music menuMusic_{};
+		Sfx sfx_;                   // recorded UI/cue/ambience sounds + music playlist
+		// Plays a recorded stage cue (cues/<name>), or runs fallback if there isn't one.
+		void cue(const char* name, const std::function<void()>& fallback = nullptr) {
+			if (sfx_.has(name)) sfx_.play(name, settings().effectsVolume);
+			else if (fallback) fallback();
+		}
 		Texture2D logo_{};          // res/logo.png, replaces the text title if present
-		bool musicLoaded_ = false;
 
 		std::vector<CarSpec> cars_;
 		std::vector<StageDef> stageDefs_;
@@ -228,6 +237,11 @@ namespace rally {
 		int camMode_ = 0;           // driver: 0 chase, 1 near chase, 2 bonnet, 3 cockpit
 		int navView_ = 0;           // navigator: 0 co-driver seat, 1 chase, 2 map, 3 pace book
 		Vector3 camPos_{}, camLook_{};
+		// In-car head movement (spring-damper on the car's acceleration + shake).
+		Vector3 headPrevVel_{}, headOff_{}, headVel_{}, headJitter_{};
+		float headShake_ = 0;
+		uint16_t headSeenImpact_ = 0;
+		float fadeIn_ = 0;          // black fade over the first moment of a stage
 		float camYaw_ = 0;
 		bool camInit_ = false;
 		bool debugOverlay_ = false;
@@ -242,6 +256,10 @@ namespace rally {
 		std::deque<Snapshot> snapshots_;
 		CarVisual remoteVisual_{};
 		uint16_t seenBackfire_ = 0, seenShift_ = 0, seenImpact_ = 0;
+		bool heardEngine_ = false;     // last engine state the audio saw (start / stall sounds)
+		uint8_t heardLights_ = 0;      // broken-light bits already heard (glass)
+		float stoneTimer_ = 0;         // next recorded stone hit on gravel
+		float cheerCooldown_ = 0;      // between crowd cheers
 		int lastGearHeard_ = 1;
 		uint32_t sendSeq_ = 0;
 		float sendTimer_ = 0;

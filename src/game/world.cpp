@@ -225,10 +225,14 @@ void main() {
 		grass_ = loadTex("res/textures/grass.png");
 		gravel_ = loadTex("res/textures/gravel.png", Color{ 255, 228, 195, 255 });
 		dirt_ = loadTex("res/textures/dirt.png");
-		mud_ = loadTex("res/textures/dirt.png", Color{ 150, 120, 95, 255 });
-		snow_ = makeNoiseTexture(256, Color{ 225, 232, 245, 255 }, Color{ 255, 255, 255, 255 }, 3.0f, 11, 0.12f);
-		snowRoad_ = makeNoiseTexture(256, Color{ 196, 202, 214, 255 }, Color{ 238, 242, 250, 255 }, 5.0f, 12, 0.25f);
-		tarmac_ = makeNoiseTexture(256, Color{ 48, 48, 52, 255 }, Color{ 88, 88, 92, 255 }, 6.0f, 13, 0.6f);
+		// Optional photo textures (see ASSETS.md); otherwise tinted/procedural stand-ins.
+		mud_ = FileExists("res/textures/mud.png") ? loadTex("res/textures/mud.png") : loadTex("res/textures/dirt.png", Color{ 150, 120, 95, 255 });
+		snow_ = FileExists("res/textures/snow.png") ? loadTex("res/textures/snow.png")
+			: makeNoiseTexture(256, Color{ 225, 232, 245, 255 }, Color{ 255, 255, 255, 255 }, 3.0f, 11, 0.12f);
+		snowRoad_ = FileExists("res/textures/snow_road.png") ? loadTex("res/textures/snow_road.png")
+			: makeNoiseTexture(256, Color{ 196, 202, 214, 255 }, Color{ 238, 242, 250, 255 }, 5.0f, 12, 0.25f);
+		tarmac_ = FileExists("res/textures/tarmac.png") ? loadTex("res/textures/tarmac.png")
+			: makeNoiseTexture(256, Color{ 48, 48, 52, 255 }, Color{ 88, 88, 92, 255 }, 6.0f, 13, 0.6f);
 
 		terrainMat_ = makeMat(shader_, grass_);
 		Texture2D roadTex[(int)Surface::Count] = { tarmac_, gravel_, snowRoad_, mud_, grass_, dirt_ };

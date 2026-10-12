@@ -400,6 +400,7 @@ namespace rally {
 				cfg.seatHeight = hcm * 0.01f; cfg.seatForward = fcm * 0.01f;
 				y += h + g;
 			}
+			ui::slider({ x, y, w, h }, "In-car head movement", cfg.headMovement, 0, 1); y += h + g;
 			ui::slider({ x, y, w, h }, "Draw distance", cfg.drawDistance, 200, 900, "%.0f m", 1.0f); y += h + g;
 			ui::choice({ x, y, w, h }, "Particles", cfg.particleQuality, { "Off", "Low", "High" }); y += h + g;
 			ui::toggle({ x, y, w, h }, "Show FPS", cfg.showFps); y += h + g;

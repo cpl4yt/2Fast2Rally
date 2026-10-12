@@ -31,6 +31,7 @@ int main(int argc, char** argv) {
 		else if (a == "--hires") opts.hires = true;
 		else if (a == "--part") { opts.galleryPart = next(0); opts.galleryParts = (i + 1 < argc) ? std::atoi(argv[++i]) : 1; }
 		else if (a == "--genstages") opts.genStages = true;
+		else if (a == "--audiodump") opts.audioDump = true;
 		else if (a == "--stage") opts.stage = next(0);
 		else if (a == "--car") opts.car = next(0);
 		else if (a == "--weather") opts.weather = next(0);

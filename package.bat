@@ -2,7 +2,7 @@
 rem Builds a clean Release (no console window) and zips it into dist\.
 setlocal
 set "PATH=C:\w64devkit\bin;C:\cmake\bin;%PATH%"
-set "VER=1.0.0"
+set "VER=1.1.0"
 set "OUT=dist\2Fast2Rally-v%VER%"
 
 cmake -S . -B build-release -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DRALLY_SHOW_CONSOLE=OFF || exit /b 1

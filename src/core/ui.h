@@ -1,5 +1,6 @@
 #pragma once
 #include <raylib.h>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,10 @@ namespace rally::ui {
 	bool back();
 	// True while a text field has keyboard focus (gameplay keys should be ignored).
 	bool typing();
+
+	// Menu sounds: called when focus moves, a widget is activated, or back is pressed.
+	enum class SoundEvent { Select, Move, Back };
+	void setSoundHook(std::function<void(SoundEvent)> fn);
 
 	// Small helpers.
 	std::string formatTime(double seconds, bool sign = false);

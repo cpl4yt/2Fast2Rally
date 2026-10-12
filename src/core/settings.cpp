@@ -90,6 +90,7 @@ namespace rally {
 			windowH = j.value("windowH", windowH);
 			fov = j.value("fov", fov);
 			seatHeight = j.value("seatHeight", seatHeight); seatForward = j.value("seatForward", seatForward);
+			headMovement = j.value("headMovement", headMovement);
 			drawDistance = j.value("drawDistance", drawDistance);
 			particleQuality = j.value("particleQuality", particleQuality);
 			showFps = j.value("showFps", showFps);
@@ -136,7 +137,7 @@ namespace rally {
 		j["fullscreen"] = fullscreen; j["vsync"] = vsync;
 		j["windowW"] = windowW; j["windowH"] = windowH;
 		j["fov"] = fov; j["drawDistance"] = drawDistance;
-		j["seatHeight"] = seatHeight; j["seatForward"] = seatForward;
+		j["seatHeight"] = seatHeight; j["seatForward"] = seatForward; j["headMovement"] = headMovement;
 		j["particleQuality"] = particleQuality; j["showFps"] = showFps; j["msaa"] = msaa;
 		j["masterVolume"] = masterVolume; j["engineVolume"] = engineVolume;
 		j["effectsVolume"] = effectsVolume; j["voiceVolume"] = voiceVolume; j["musicVolume"] = musicVolume;

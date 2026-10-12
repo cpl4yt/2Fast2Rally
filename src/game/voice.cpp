@@ -41,21 +41,32 @@ namespace rally {
 		}
 	}
 
-	void Voice::load(const std::string& dir) {
+	void Voice::load(const std::string& dir, const std::string& humanDir) {
 		if (loaded_ || !IsAudioDeviceReady()) return;
 		std::vector<std::string> keys = allNoteWords();
 		for (const char* extra : { "ready", "go", "goodluck", "finished" }) keys.push_back(extra);
-		int count = 0;
+		int count = 0, human = 0;
 		for (const std::string& k : keys) {
-			std::string path = dir + "/" + k + ".wav";
+			// A recorded co-driver (any of these formats) wins over the TTS clip.
+			std::string path;
+			bool isHuman = false;
+			for (const char* ext : { ".wav", ".ogg", ".mp3", ".flac" }) {
+				std::string p = humanDir + "/" + k + ext;
+				if (!humanDir.empty() && FileExists(p.c_str())) { path = p; isHuman = true; break; }
+			}
+			if (path.empty()) path = dir + "/" + k + ".wav";
 			if (!FileExists(path.c_str())) continue;
 			Wave w = LoadWave(path.c_str());
 			if (w.data == nullptr) continue;
+			WaveFormat(&w, w.sampleRate, 16, w.channels);
 			trimSilence(w);
 			clips_[k] = LoadSoundFromWave(w);
+			humanClip_[k] = isHuman;
 			UnloadWave(w);
 			++count;
+			if (isHuman) ++human;
 		}
+		if (human > 0) log::info("voice: %d recorded co-driver clips from %s", human, humanDir.c_str());
 		beepLow_ = tone(880.0f, 0.16f, 0.5f);
 		beepHigh_ = tone(1320.0f, 0.5f, 0.55f);
 		loaded_ = true;
@@ -98,7 +109,7 @@ namespace rally {
 			if (it == clips_.end()) continue;
 			current_ = &it->second;
 			SetSoundVolume(*current_, volume_);
-			SetSoundPitch(*current_, pitch_);
+			SetSoundPitch(*current_, humanClip_[w] ? 1.0f : pitch_);   // TTS is sped up a touch; people aren't
 			PlaySound(*current_);
 			playing_ = true;
 			return;

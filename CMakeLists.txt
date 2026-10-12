@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(2Fast2Rally VERSION 1.0.0 LANGUAGES C CXX)
+project(2Fast2Rally VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -43,9 +43,11 @@ set(RALLY_SOURCES
     src/game/stageGen.cpp
     src/game/paceNotes.cpp
     src/game/voice.cpp
+    src/game/sfx.cpp
     src/game/world.cpp
     src/game/carRender.cpp
     src/game/particles.cpp
+    src/game/tyreMarks.cpp
     src/game/session.cpp
     src/game/leaderboard.cpp
     src/game/game.cpp

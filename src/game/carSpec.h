@@ -13,6 +13,7 @@ namespace rally {
 		std::string name = "Car";
 		std::string carClass = "";
 		std::string description = "";
+		std::string soundPack = "";       // res/audio/cars/<soundPack>/ (defaults to id)
 		Drivetrain drivetrain = Drivetrain::AWD;
 		float frontTorqueShare = 0.45f;   // AWD only
 

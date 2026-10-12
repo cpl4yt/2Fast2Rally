@@ -19,6 +19,8 @@ namespace rally::ui {
 		bool editing = false;     // a textField is capturing keys
 		int editingIndex = -1;
 		bool backPressed = false;
+		std::function<void(SoundEvent)> soundHook;
+		void sound(SoundEvent e) { if (soundHook) soundHook(e); }
 
 		bool padPressed(int b) { return IsGamepadAvailable(0) && IsGamepadButtonPressed(0, b); }
 
@@ -26,7 +28,7 @@ namespace rally::ui {
 		bool nextWidget(Rectangle r, int& index) {
 			index = widgetCount++;
 			Vector2 m = GetMousePosition();
-			if (mouseMoved && CheckCollisionPointRec(m, r)) focus = index;
+			if (mouseMoved && CheckCollisionPointRec(m, r) && focus != index) { focus = index; sound(SoundEvent::Move); }
 			return focus == index;
 		}
 
@@ -95,16 +97,17 @@ namespace rally::ui {
 		}
 
 		int n = std::max(1, lastWidgetCount);
-		if (IsKeyPressed(KEY_DOWN) || padPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN)) focus = (focus + 1) % n;
-		if (IsKeyPressed(KEY_UP) || padPressed(GAMEPAD_BUTTON_LEFT_FACE_UP)) focus = (focus - 1 + n) % n;
+		if (IsKeyPressed(KEY_DOWN) || padPressed(GAMEPAD_BUTTON_LEFT_FACE_DOWN)) { focus = (focus + 1) % n; sound(SoundEvent::Move); }
+		if (IsKeyPressed(KEY_UP) || padPressed(GAMEPAD_BUTTON_LEFT_FACE_UP)) { focus = (focus - 1 + n) % n; sound(SoundEvent::Move); }
 		if (IsKeyPressed(KEY_LEFT) || padPressed(GAMEPAD_BUTTON_LEFT_FACE_LEFT)) horizontal = -1;
 		if (IsKeyPressed(KEY_RIGHT) || padPressed(GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) horizontal = 1;
 		if (IsKeyPressed(KEY_ENTER) || padPressed(GAMEPAD_BUTTON_RIGHT_FACE_DOWN)) activate = true;
-		if (IsKeyPressed(KEY_ESCAPE) || padPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) backPressed = true;
+		if (IsKeyPressed(KEY_ESCAPE) || padPressed(GAMEPAD_BUTTON_RIGHT_FACE_RIGHT)) { backPressed = true; sound(SoundEvent::Back); }
 		if (focus >= n) focus = 0;
 	}
 
 	void resetFocus() { focus = 0; editing = false; }
+	void setSoundHook(std::function<void(SoundEvent)> fn) { soundHook = std::move(fn); }
 
 	bool back() { return backPressed && !editing; }
 	bool typing() { return editing; }
@@ -135,7 +138,8 @@ namespace rally::ui {
 		text(label, r.x + r.width * 0.5f, r.y + (r.height - fs) * 0.5f, fs, enabled ? kText : kTextDim, Center);
 		if (!enabled) return false;
 		bool clicked = CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-		return clicked || (f && activate);
+		if (clicked || (f && activate)) { sound(SoundEvent::Select); return true; }
+		return false;
 	}
 
 	bool toggle(Rectangle r, const std::string& label, bool& v) {
@@ -146,7 +150,7 @@ namespace rally::ui {
 		text(label, r.x + 16 * s(), r.y + (r.height - fs) * 0.5f, fs, kText);
 		text(v ? "ON" : "OFF", r.x + r.width - 16 * s(), r.y + (r.height - fs) * 0.5f, fs, v ? kAccent : kTextDim, Right);
 		bool clicked = CheckCollisionPointRec(GetMousePosition(), r) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-		if (clicked || (f && (activate || horizontal != 0))) { v = !v; return true; }
+		if (clicked || (f && (activate || horizontal != 0))) { v = !v; sound(SoundEvent::Select); return true; }
 		return false;
 	}
 
@@ -174,6 +178,7 @@ namespace rally::ui {
 		}
 		if (f && horizontal != 0) {
 			v = std::clamp(v + horizontal * (hi - lo) * 0.05f, lo, hi);
+			sound(SoundEvent::Move);
 			changed = true;
 		}
 		return changed;
@@ -196,6 +201,7 @@ namespace rally::ui {
 		if (f && activate) dir = 1;
 		if (dir != 0) {
 			idx = (idx + dir + (int)opts.size()) % (int)opts.size();
+			sound(SoundEvent::Select);
 			return true;
 		}
 		return false;

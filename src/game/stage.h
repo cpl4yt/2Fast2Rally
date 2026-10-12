@@ -105,6 +105,9 @@ namespace rally {
 
 		// --- Ground ---
 		float heightAt(float x, float z) const override;
+		// Height of what's drawn there (the crowned road mesh sits a few cm above
+		// the physics ground) - for decals like tyre marks.
+		float visualHeightAt(float x, float z) const;
 		Surface surfaceAt(float x, float z) const override;
 		float gripMultiplier(Surface s) const override;
 

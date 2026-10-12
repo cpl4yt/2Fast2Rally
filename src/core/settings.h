@@ -30,6 +30,7 @@ namespace rally {
 		int windowW = 1600, windowH = 900;
 		float fov = 70.0f;
 		float seatHeight = 0.0f, seatForward = 0.0f; // cockpit camera offsets (m)
+		float headMovement = 1.0f;                   // in-car head sway/shake, 0..1
 		float drawDistance = 450.0f;
 		int particleQuality = 2;  // 0 off, 1 low, 2 high
 		bool showFps = false;
