@@ -117,6 +117,23 @@ completes all 3 stages, and a host + navigator pair on localhost finish together
 - [x] Smoother terrain, no self-overlapping roads, editor overlap warning
 - [x] How to Play / Credits, exe icon + version info, pause-menu fixes
 
+## Release readiness (v1.1.0)
+- [ ] Replace the Windows text-to-speech co-driver with recorded lines (commercial TTS licensing is a grey area)
+- [ ] Ship an OFL body font instead of loading Bahnschrift from `C:\Windows\Fonts`
+- [ ] Real engine recordings, car models and tarmac/snow textures (ASSETS.md drop-in slots)
+- [ ] Fix stale docs: README says `package.bat` makes `v0.1.0-beta`; refresh the Status section above
+- [ ] Finish the 1.1.0 changelog, rebuild the zip, clear old beta/1.0 zips from `dist/`
+- [ ] Verify licenses of reused Prarie assets (trees, rocks, music)
+- [ ] Nice to have: online leaderboards / ghosts; co-op currently needs port forwarding or a VPN
+
+### Shared release checklist
+- [ ] Test the zip on a clean Windows machine (SmartScreen/AV warnings, missing DLLs); consider code signing
+- [ ] Performance on low-end / integrated GPUs
+- [ ] 1080p, 1440p and ultrawide screens
+- [ ] Linux build test
+- [ ] Store page: capsule art, screenshots, trailer
+- [ ] Repo committed and release tagged
+
 ## Still needs people
 - [ ] Playtests with 3-5 pairs (PLAYTEST.md)
 - [ ] Real internet co-op test
