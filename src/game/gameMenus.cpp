@@ -126,6 +126,8 @@ namespace rally {
 			y += 200 * s;
 		}
 		float bw = 460 * s, bh = 56 * s, gap = 10 * s;
+		if (ui::button({ x, y, bw, bh }, "Career (garage)")) openCareer();
+		y += bh + gap;
 		if (ui::button({ x, y, bw, bh }, "Solo")) openScreen(Screen::SoloSetup);
 		y += bh + gap;
 		if (ui::button({ x, y, bw, bh }, "Host Co-op")) openScreen(Screen::HostMenu);
@@ -629,9 +631,9 @@ namespace rally {
 		ui::text("CREDITS", x, y, 64 * s, ui::kAccent, ui::Left, true);
 		y += 100 * s;
 		auto item = [&](const char* a, const char* b) {
-			ui::text(a, x, y, 26 * s, ui::kText);
-			ui::text(b, x + 20 * s, y + 32 * s, 21 * s, ui::kTextDim);
-			y += 74 * s;
+			ui::text(a, x, y, 24 * s, ui::kText);
+			ui::text(b, x + 20 * s, y + 29 * s, 20 * s, ui::kTextDim);
+			y += 60 * s;
 		};
 		item("2Fast2Rally", "Christian Larsen - game design, logo and the Prairie engine it is built on.");
 		item("Prairie engine", "Rigid-body physics, ENet networking, tree/rock/grass models and textures, menu music.");
@@ -640,7 +642,11 @@ namespace rally {
 		item("JSON for Modern C++", "Niels Lohmann - MIT license.");
 		item("Cherry Bomb One font", "Satsuyako - SIL Open Font License.");
 		item("Co-driver voice", "Generated with Windows text-to-speech (tools/genvoice.ps1).");
-		item("Engine, surface and weather sounds", "Synthesised in real time - no samples.");
+		item("Engine, surface and weather sounds", "Synthesised in real time.");
+		item("Crash, glass, starter, crowd and workshop sounds", "Sonniss GDC Game Audio Bundle: Coll Anderson, Carlo Ascrizzi, Sound Ex Machina, Soundopolis, Varazuvi.");
+		item("Car models", "LowPoly_Cars_01 pack (from the project's asset folder) - author and licence to be confirmed.");
+		item("Menu sounds, garage part models", "Kenney (kenney.nl) - Interface Sounds, Car Kit - CC0.");
+		item("Tarmac and garage textures", "ambientCG and Poly Haven - CC0.");
 		ui::text(std::string("Version ") + RALLY_VERSION, x, H - 150 * s, 22 * s, ui::kTextDim);
 		if (ui::button({ x, H - 110 * s, 300 * s, 60 * s }, "Back") || ui::back()) openScreen(Screen::MainMenu);
 		(void)W;

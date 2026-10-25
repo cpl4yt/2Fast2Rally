@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(2Fast2Rally VERSION 1.1.0 LANGUAGES C CXX)
+project(2Fast2Rally VERSION 1.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -55,6 +55,8 @@ set(RALLY_SOURCES
     src/game/gameStage.cpp
     src/game/gameHud.cpp
     src/game/editor.cpp
+    src/game/career.cpp
+    src/game/gameGarage.cpp
 )
 
 add_executable(2Fast2Rally ${RALLY_SOURCES})

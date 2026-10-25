@@ -14,6 +14,7 @@ namespace rally {
 		std::string carClass = "";
 		std::string description = "";
 		std::string soundPack = "";       // res/audio/cars/<soundPack>/ (defaults to id)
+		std::string model = "";           // res/models/cars/<model>_body.obj etc; empty = procedural body
 		Drivetrain drivetrain = Drivetrain::AWD;
 		float frontTorqueShare = 0.45f;   // AWD only
 

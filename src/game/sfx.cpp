@@ -33,7 +33,7 @@ namespace rally {
 	void Sfx::load(const std::string& root) {
 		if (loaded_ || !IsAudioDeviceReady()) return;
 		int n = 0;
-		for (const char* sub : { "/ui", "/cues" })
+		for (const char* sub : { "/ui", "/cues", "/garage" })
 			for (auto& p : listAudio(root + sub)) {
 				Sound s = LoadSound(p.string().c_str());
 				if (s.frameCount == 0) { log::warn("sfx: could not load %s", p.string().c_str()); continue; }

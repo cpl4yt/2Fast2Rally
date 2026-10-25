@@ -31,6 +31,7 @@ namespace rally {
 		float dirt = 0.0f;              // 0..1
 		float damage = 0.0f;            // 0..1 overall
 		uint8_t lightsBroken = 0;       // bit0 left, bit1 right, bit2 pod
+		uint8_t wheelMissing = 0;       // bitmask: wheels not on the car (career)
 	};
 
 	// Wheel indices: 0 FL, 1 FR, 2 RL, 3 RR.
@@ -54,6 +55,33 @@ namespace rally {
 		float driveForce = 0;
 		int wheelsOnGround = 0;
 		float frontSlip = 0, rearSlip = 0;
+		// Accumulated work since the career/mechanics layer last read (and zeroed) it.
+		float brakeWork[4]{};          // J dissipated by each brake
+		float clutchWork = 0;          // J dissipated by a slipping clutch
+		float tyreWork[4]{};           // J of sliding at each contact patch
+		float suspensionWork[4]{};     // J through each damper
+		float distance = 0;            // m travelled
+		float limiterTime = 0;         // s spent on the rev limiter
+		int grinds = 0;                // gear grinds
+	};
+
+	// Condition of the car's parts as it affects driving (career mode; the
+	// defaults are a perfect car). Written by the mechanics layer each tick.
+	struct MechState {
+		float powerMul = 1.0f;         // engine output (wear, plugs, filter, turbo, heat...)
+		float clutchMul = 1.0f;        // clutch capacity (worn clutch slips)
+		float brakeMul[4] = { 1, 1, 1, 1 };
+		float gripMul[4] = { 1, 1, 1, 1 };    // tyre tread / puncture
+		float springMul[4] = { 1, 1, 1, 1 };
+		float damperMul[4] = { 1, 1, 1, 1 };
+		float steerPull = 0.0f;        // radians of toe/rack misalignment
+		float steerWobble = 0.0f;      // radians of shake (loose wheel / bearing)
+		float popOutChance = 0.0f;     // per second, a worn gearbox jumps to neutral
+		float misfire = 0.0f;          // 0..1 chance per firing interval of a stumble
+		uint8_t wheelOff = 0;          // bitmask: wheels that have fallen off / aren't fitted
+		bool noDrive = false;          // clutch or gearbox missing
+		bool noIgnition = false;       // dead battery / no plugs / no fuel: can't (re)start
+		bool engineKill = false;       // seized / out of fuel / belt snapped: stops it now
 	};
 
 	class Vehicle {
@@ -95,7 +123,10 @@ namespace rally {
 		float dirt = 0.0f;
 		uint8_t lightsBroken = 0;
 		float lastImpact = 0.0f;        // m/s of the last significant hit (consumed by game)
+		Vector3 lastImpactLocal{};      // its velocity change in car space (+z forward, +x left)
 		int impactCount = 0;
+		MechState mech;                 // part condition effects (career)
+		VehicleTelemetry& telemetryMut() { return tele_; }
 
 		bool upsideDown() const;
 		float timeUpsideDown = 0.0f;
@@ -149,6 +180,9 @@ namespace rally {
 		float clutchPedal_ = 0.0f;
 		float driveUsed_ = 0.0f;        // N actually delivered to the ground last tick
 		float grindCooldown_ = 0.0f;
+		float misfireTimer_ = 0.0f;
+		unsigned rng_ = 0x2468ace1u;
+		float rand01() { rng_ = rng_ * 1664525u + 1013904223u; return (rng_ >> 8) / float(1 << 24); }
 	};
 
 	// Quaternion helpers used across game code.

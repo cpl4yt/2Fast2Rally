@@ -1,0 +1,5 @@
+{
+  "length": 4.810, "width": 1.792, "height": 1.414,
+  "wheelRadius": 0.361, "wheelWidth": 0.243, "trackHalf": 0.757, "frontAxleZ": 1.147, "rearAxleZ": -1.401,
+  "belt": 0.980, "roofY": 1.414, "cabFront": 0.795, "cabBack": -1.205, "roofFront": 0.395, "roofBack": -1.205
+}

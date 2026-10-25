@@ -291,6 +291,38 @@ namespace rally {
 			ui::text(buf, W * 0.5f, 70 * s, 20 * s, ui::kBad, ui::Center);
 		}
 
+		// --- Career: temperature, fuel and warning lamps (bottom left) ---
+		if (careerMode_ && career_.car()) {
+			const CarCondition& cc = *career_.car();
+			float bx = 60 * s, byy = H - 150 * s;
+			DrawRectangleRounded({ bx - 14 * s, byy - 12 * s, 330 * s, 128 * s }, 0.15f, 6, Color{ 15, 16, 20, 180 });
+			auto bar = [&](const char* label, float t, Color c, const char* val) {
+				ui::text(label, bx, byy, 20 * s, ui::kTextDim);
+				Rectangle r = { bx + 70 * s, byy + 5 * s, 160 * s, 12 * s };
+				DrawRectangleRec(r, Color{ 50, 54, 62, 255 });
+				DrawRectangleRec({ r.x, r.y, r.width * std::clamp(t, 0.0f, 1.0f), r.height }, c);
+				ui::text(val, bx + 300 * s, byy, 20 * s, ui::kText, ui::Right);
+				byy += 28 * s;
+			};
+			float temp = cc.engineTemp;
+			std::snprintf(buf, sizeof buf, "%.0f C", temp);
+			bar("TEMP", (temp - 40.0f) / 100.0f, temp > 112 ? ui::kBad : temp > 100 ? ui::kAccent : ui::kGood, buf);
+			std::snprintf(buf, sizeof buf, "%.0f L", cc.fluids.fuel);
+			bar("FUEL", cc.fluids.fuel / Fluids::kFuelCap, cc.fluids.fuel < 6 ? ui::kBad : ui::kGood, buf);
+			// Lamps: oil pressure, battery, brakes - lit when something's wrong.
+			float lx = bx;
+			auto lamp = [&](const char* name, bool on) {
+				Color c = on ? ((int)(GetTime() * 3) % 2 ? ui::kBad : Color{ 120, 30, 25, 255 }) : Color{ 45, 48, 55, 255 };
+				DrawRectangleRounded({ lx, byy, 66 * s, 26 * s }, 0.3f, 4, c);
+				ui::text(name, lx + 33 * s, byy + 3 * s, 18 * s, on ? WHITE : ui::kTextDim, ui::Center);
+				lx += 74 * s;
+			};
+			lamp("OIL", cc.fluids.oil < 1.5f);
+			lamp("BATT", cc.fluids.battery < 0.25f || cc.health("alternator") < 0.15f);
+			lamp("BRAKE", cc.fluids.brakeFluid < 0.3f || cc.health("pads_fl") < 0.08f || cc.health("pads_fr") < 0.08f);
+			lamp("ENG", !car_.engineRunning() || cc.health("engine_block") < 0.25f);
+		}
+
 		// --- Progress bar (left) ---
 		float L = stage_.finishS;
 		Rectangle pb = { 24 * s, H * 0.25f, 10 * s, H * 0.5f };
@@ -469,7 +501,7 @@ namespace rally {
 			if (run_.online) session_.sendPause(false);
 		}
 		y += 76 * s;
-		if (!run_.online && !rally_.active) {
+		if (!run_.online && !rally_.active && !careerMode_) {
 			if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, "Restart Stage")) {
 				startStage(stageIndex_, carIndex_, weather_, timeOfDay_, run_.role, false);
 				return;
@@ -482,6 +514,14 @@ namespace rally {
 		y += 52 * s;
 		ui::slider({ p.x + 40 * s, y, p.width - 80 * s, 44 * s }, "Engine", cfg.engineVolume, 0, 1); y += 52 * s;
 		ui::slider({ p.x + 40 * s, y, p.width - 80 * s, 44 * s }, "Co-driver", cfg.voiceVolume, 0, 1); y += 64 * s;
+		if (careerMode_) {
+			if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, "Retire to the Garage")) {
+				cfg.save(kSettingsPath);
+				careerStageDone(false);
+				careerMode_ = false; endStage(); garageSel_ = -1; garageTab_ = 0; openScreen(Screen::Garage);
+			}
+			return;
+		}
 		if (ui::button({ p.x + 40 * s, y, p.width - 80 * s, 60 * s }, run_.online ? (session_.isHost() ? "Back to Lobby" : "Leave Rally") : "Quit to Menu")) {
 			bool online = run_.online;
 			cfg.save(kSettingsPath);
@@ -534,6 +574,17 @@ namespace rally {
 
 		float by = p.y + p.height - 90 * s;
 		float bw = (p.width - 100 * s) / 3.0f;
+
+		// --- Career: prize money, then back to the garage ---
+		if (careerMode_) {
+			char cb[96];
+			std::snprintf(cb, sizeof cb, "Prize money: $%.0f   -   bank $%.0f", careerReward_, career_.money);
+			ui::text(cb, W * 0.5f, by - 44 * s, 28 * s, ui::kGood, ui::Center);
+			if (ui::button({ p.x + p.width * 0.5f - bw * 0.75f, by, bw * 1.5f, 60 * s }, "Back to the Garage")) {
+				careerMode_ = false; endStage(); garageSel_ = -1; garageTab_ = 0; openScreen(Screen::Garage);
+			}
+			return;
+		}
 
 		// --- Rally mode: running total and the next stage ---
 		if (rally_.active) {

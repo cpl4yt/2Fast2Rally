@@ -1,6 +1,19 @@
 # Changelog
 
-## 1.1.0 — in progress
+## Unreleased — career & garage
+
+**New**
+- **New car models**: all nine cars now use the low-poly vehicle models from the `LowPoly_Cars_01` pack instead of the old built-in boxes (tools/importcars.ps1 re-imports them). The wheels spin and steer, the cockpit is built to fit each body, and the hood is the real model's.
+- **Career mode** (main menu -> Career): start with a tired used car and $2500, enter rallies, earn prize money from your times, and keep the car running yourself.
+- **Garage** (in the spirit of My Summer Car): 44 parts across engine, drivetrain, brakes, suspension, wheels, steering and body. Every part has a hidden condition you have to *inspect*, bolts you loosen and tighten one at a time, and parts that have to come off first (wheel before pads, pads before disc, gearbox before clutch, head before gasket...). Buy parts new or used, refit them, scrap the old ones, beat out dents.
+- **Fluids & service**: oil level and condition, coolant, brake fluid, fuel, battery charge, wheel alignment.
+- **Wear and failures on the stage**: plugs misfire, filters clog, worn clutches slip, worn gearboxes jump out of gear, pads wear to the metal and chew the discs, struts go soft, tyres wear and puncture, the engine overheats if the radiator is holed or coolant low (blows the head gasket, can seize), timing belts snap, batteries go flat, you can run out of fuel. Hits damage whatever they land on: front hits get the bumper, then radiator and lights; side hits bend the steering and alignment.
+- **Loose bolts work themselves out** - forget the wheel nuts and the wheel comes off mid-stage.
+- Career HUD: engine temperature, fuel and warning lamps.
+- New sounds from the asset packs: real crash, glass, starter-motor, crowd cheers, workshop tools (Sonniss GDC bundle), menu clicks (Kenney). Photo tarmac and garage textures (ambientCG / Poly Haven), garage part models (Kenney Car Kit).
+- Test hooks: `--selftest --career` (AI drives a career stage, logs money and wear), `--garageshots`.
+
+## 1.1.0 — early access
 
 **New**
 - **Drop-in asset slots** (see `ASSETS.md`): recorded co-driver voice, engine packs

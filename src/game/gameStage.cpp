@@ -96,6 +96,7 @@ namespace rally {
 		heardEngine_ = false; heardLights_ = 0; stoneTimer_ = 0; cheerCooldown_ = 0;
 		headPrevVel_ = headOff_ = headVel_ = headJitter_ = {}; headShake_ = 0; headSeenImpact_ = 0;
 		fadeIn_ = 1.3f;
+		if (careerMode_ && career_.car()) career_.applyEffects(*career_.car(), car_, cars_[carIndex_]);
 		particles_.clear();
 		tyreMarks_.clear();
 		snapshots_.clear();
@@ -113,6 +114,7 @@ namespace rally {
 		curVisual_ = prevVisual_ = renderVisual_ = remoteVisual_ = car_.visual();
 		run_.progress = stage_.project(car_.position(), run_.hint, &run_.lateral);
 		run_.lastOnRoadS = run_.progress;
+		if (careerMode_) { career_.seenImpacts_ = car_.impactCount; car_.telemetryMut() = VehicleTelemetry{}; careerReward_ = 0; }
 
 		if (resume) {
 			const auto& r = *resume;
@@ -392,6 +394,12 @@ namespace rally {
 			particles_.emitImpact(car_.position(), Color{ 150, 140, 120, 180 }, 10);
 			car_.lastImpact = 0.0f;
 		}
+		if (careerMode_ && career_.car() && run_.role == Role::Driver) {
+			bool rough = false;
+			for (int i = 0; i < 4; ++i) if (car_.wheel(i).contact && surfaceProps(car_.wheel(i).surface).loose) rough = true;
+			bool running = run_.phase == RunPhase::Running || run_.phase == RunPhase::Finished;
+			for (const std::string& m : career_.simulate(*career_.car(), car_, cars_[carIndex_], h, running, rough)) setMessage(m, ui::kBad, 3.0f);
+		}
 
 		if (run_.phase == RunPhase::Running) {
 			run_.stageTime += h;
@@ -544,6 +552,7 @@ namespace rally {
 			run_.rank = leaderboard_.add(stage_.def.id, r);
 			run_.recorded = true;
 		}
+		if (careerMode_) careerStageDone(true);
 	}
 
 	void Game::startRally(int event) {

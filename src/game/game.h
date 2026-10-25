@@ -13,6 +13,7 @@
 #include "game/paceNotes.h"
 #include "game/voice.h"
 #include "game/sfx.h"
+#include "game/career.h"
 #include "game/world.h"
 #include "game/carRender.h"
 #include "game/particles.h"
@@ -21,7 +22,7 @@
 #include "game/leaderboard.h"
 
 namespace rally {
-	enum class Screen { MainMenu, SoloSetup, HostMenu, JoinMenu, Lobby, Settings, Leaderboard, Stage, Editor, HowToPlay, Credits };
+	enum class Screen { MainMenu, SoloSetup, HostMenu, JoinMenu, Lobby, Settings, Leaderboard, Stage, Editor, HowToPlay, Credits, Garage };
 	enum class Role : uint8_t { Driver, Navigator };
 	enum class RunPhase : uint8_t { Loading, WaitingPartner, Countdown, Running, Finished };
 
@@ -36,7 +37,9 @@ namespace rally {
 		float timeLimit = 400.0f;
 		std::string shotPrefix = "screenshot";
 		bool genStages = false;
-		bool audioDump = false;      // record the car-audio mix to logs/<shots>_audio.wav
+		bool audioDump = false;
+		bool career = false;         // --selftest drives a career stage (wear, prize money)
+		bool garageShots = false;    // screenshot the career garage tabs and exit      // record the car-audio mix to logs/<shots>_audio.wav
 		int navView = -1;             // force a navigator view (for screenshots)
 		bool asNavigator = false;     // self test as the navigator (AI driver)
 		bool screens = false;         // screenshot every menu screen and exit
@@ -223,6 +226,32 @@ namespace rally {
 		void rallyRecordStage();
 		void screenHowToPlay();
 		void screenCredits();
+
+		// --- Career (gameGarage.cpp) ---
+		Career career_;
+		bool careerMode_ = false;       // the current stage is a career stage
+		float careerReward_ = 0;
+		void openCareer();
+		void screenGarage(float dt);
+		void drawGarage3D(float dt);
+		void garageEnsureAssets();
+		void garageUnload();
+		void garageMessage(const std::string& m, bool good);
+		void careerSave();
+		void careerStartStage();
+		void careerStageDone(bool finished);
+		int carIndexById(const std::string& id) const;
+		CarRenderer garageRender_;
+		std::string garageBuiltFor_;
+		int garageTab_ = 0, garageCat_ = 0, garageSel_ = -1;
+		int garageBolt_ = 0;            // +1 tightening / -1 loosening in progress
+		bool garageBoltAll_ = false;
+		float garageBoltTimer_ = 0;
+		std::string garageMsg_;
+		bool garageMsgGood_ = true;
+		float garageMsgTimer_ = 0;
+		float garageYaw_ = 0.9f, garagePitch_ = 0.35f, garageDist_ = 6.0f, garageCamDist_ = 6.0f;
+		Vector3 garageTarget_{ 0, 0.6f, 0 };
 		std::string pendingShot_;
 		bool firstRun_ = false;
 		int qaStep_ = 0;

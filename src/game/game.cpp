@@ -95,7 +95,13 @@ namespace rally {
 		if (auto_.gallery) { galleryScene_ = auto_.galleryPart; galleryStartScene(); }
 		if (auto_.selfTest) {
 			if (auto_.rally) { startRally(std::clamp(auto_.stage, 0, std::max(0, (int)eventNames_.size() - 1))); stageIndex_ = rally_.stageAt(0); }
-			startStage(stageIndex_, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
+			if (auto_.career) {
+				career_.startNew(cars_, carIndex_);
+				for (int e = 0; e < (int)eventStages_.size(); ++e)
+					for (int k = 0; k < (int)eventStages_[e].size(); ++k) if (eventStages_[e][k] == stageIndex_) { career_.event = e; career_.eventStage = k; }
+				careerStartStage();
+			}
+			else startStage(stageIndex_, carIndex_, weather_, timeOfDay_, auto_.asNavigator ? Role::Navigator : Role::Driver, false);
 			run_.aiDriver = true;
 			if (auto_.audioDump) synth::startCapture();
 		}
@@ -149,6 +155,7 @@ namespace rally {
 		if (dashRT_.id) UnloadRenderTexture(dashRT_);
 		if (logo_.id) UnloadTexture(logo_);
 		carRender_.unload();
+		garageUnload();
 		sfx_.unload();
 		voice_.unload();
 		if (auto_.audioDump) synth::stopCapture("logs/" + auto_.shotPrefix + "_audio.wav");
@@ -215,6 +222,7 @@ namespace rally {
 		switch (screen_) {
 		case Screen::Stage: stageFrame(dt); break;
 		case Screen::Editor: editorFrame(dt); break;
+		case Screen::Garage: screenGarage(dt); break;
 		default:
 			drawMenuBackground(dt);
 			switch (screen_) {
@@ -332,6 +340,13 @@ namespace rally {
 			}
 			else if ((run_.phase == RunPhase::Finished && run_.finishedFor > 3.0f) || autoTimer_ > auto_.timeLimit) {
 				if (run_.phase == RunPhase::Finished) takeScreenshot(auto_.shotPrefix + "_results.png");
+				if (careerMode_ && career_.car()) {
+					const CarCondition& cc = *career_.car();
+					log::info("career: money=%.0f reward=%.0f km=%.1f temp=%.0f fuel=%.1f oil=%.2f/%.2f coolant=%.2f battery=%.2f", career_.money, careerReward_, cc.odometer, cc.engineTemp, cc.fluids.fuel, cc.fluids.oil, cc.fluids.oilQuality, cc.fluids.coolant, cc.fluids.battery);
+					std::string worn;
+					for (size_t i = 0; i < cc.parts.size(); ++i) { char b[64]; std::snprintf(b, sizeof b, "%s=%.2f%s ", partDefs()[i].id.c_str(), cc.parts[i].condition, cc.parts[i].installed ? "" : "(OFF)"); worn += b; }
+					log::info("career: parts %s", worn.c_str());
+				}
 				if (rally_.active) log::info("selftest: rally done stages=%d total=%.2f", (int)rally_.stageTimes.size(), rally_.total);
 				if (auto_.hTest) log::info("selftest: htest shifts=%d stalls=%d", hTestShifts_, hTestStalls_);
 				log::info("selftest: damage %.0f%% (engine %.2f steer %.2f susp %.2f) lights=%d impacts=%d", car_.visual().damage * 100.0f, car_.engineDamage, car_.steeringDamage, car_.suspensionDamage, car_.lightsBroken, car_.impactCount);
@@ -355,6 +370,34 @@ namespace rally {
 			}
 		}
 		if ((auto_.netHost || auto_.netJoin) && autoTimer_ > auto_.timeLimit + 30) quit_ = true;
+		if (auto_.garageShots) {
+			// Staged garage: a wheel off on the bench, loose bolts, a few inspections.
+			static int step = -1;
+			if (step < 0) {
+				career_.startNew(cars_, carIndex_);
+				CarCondition& cc = *career_.car();
+				career_.inspect(cc, partIndex("pads_fl"));
+				cc.part("wheel_fl").boltsTight = 0;
+				career_.remove(cc, partIndex("wheel_fl"));
+				career_.inspect(cc, partIndex("spark_plugs"));
+				cc.part("front_bumper").boltsTight = 2;
+				career_.buy(cc, partIndex("door_l"), true);
+				openScreen(Screen::Garage);
+				step = 0; autoTimer_ = 0;
+			}
+			const float at[] = { 1.5f, 3.0f, 4.5f, 6.0f, 7.5f };
+			if (step < 5 && autoTimer_ > at[step]) {
+				const char* names[] = { "parts", "brakes", "fluids", "rally", "cars" };
+				takeScreenshot(auto_.shotPrefix + "_garage_" + names[step] + ".png");
+				++step;
+				if (step == 1) { garageTab_ = 0; garageCat_ = (int)PartCat::Brakes; garageSel_ = partIndex("pads_fl"); }
+				if (step == 2) { garageTab_ = 1; garageSel_ = -1; }
+				if (step == 3) garageTab_ = 2;
+				if (step == 4) garageTab_ = 3;
+			}
+			if (step == 0 && garageSel_ < 0) { garageCat_ = (int)PartCat::Engine; garageSel_ = partIndex("spark_plugs"); }
+			if (step >= 5) quit_ = true;
+		}
 
 		EndDrawing();
 	}

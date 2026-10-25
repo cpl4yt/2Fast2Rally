@@ -91,10 +91,18 @@ build.bat            :: or "build.bat console" to keep a log console
 Needs `C:\w64devkit` (GCC) and CMake (`C:\cmake` or on PATH). The output is
 `build\2Fast2Rally.exe`, with `res\` copied next to it.
 
-Release zip: `package.bat` produces `dist\2Fast2Rally-v0.1.0-beta-win64.zip`.
+Release zip: `package.bat` produces `dist\2Fast2Rally-v<version>-win64.zip` (version set in `package.bat`, matching `CMakeLists.txt`).
 
 Linux/macOS: `cmake -S . -B build && cmake --build build` (raylib is fetched
 automatically if it isn't installed).
+
+## Career
+Main menu -> **Career**. You get a used car and some money; the garage is where you keep it alive.
+- **Parts tab**: pick a category and a part. *Inspect* shows its condition (you don't know it until you look, and it goes stale after every stage). *Loosen all* / *Tighten all* work the bolts one at a time; *Remove* once they're all loose (parts on top have to come off first). *Buy new* / *Buy used* puts a part on the bench, *Fit* puts it on - then **tighten the bolts** or it'll shake loose on the stage.
+- **Fluids tab**: oil change, top-ups, fuel, battery charge, wheel alignment.
+- **Rally tab**: enter an event, then run it stage by stage, coming back to the garage in between. The checklist shows missing parts and loose bolts.
+- **Cars tab**: buy more (used) cars and switch between them.
+Save file: `saves/career.json`.
 
 ## Modding & tuning
 - **Cars**: `res/data/cars.json` holds the engine torque curve, gearing,

@@ -1,7 +1,7 @@
 {
   "cars": [
     {
-      "id": "kestrel", "name": "Kestrel 4WD Turbo", "class": "Group A",
+      "id": "kestrel", "model": "kestrel", "name": "Kestrel 4WD Turbo", "class": "Group A",
       "description": "All-wheel-drive turbo hatch. Planted, forgiving, rotates on the handbrake.",
       "drivetrain": "AWD", "frontTorqueShare": 0.42, "mass": 1250,
       "halfExtents": [0.88, 0.33, 2.08], "rollInertiaScale": 1.7,
@@ -18,11 +18,11 @@
       "brakeForce": 12000, "brakeBias": 0.6, "handbrakeForce": 7000,
       "maxSteerDeg": 32, "steerSpeedReduction": 0.42, "steerRate": 4.5,
       "dragCoeff": 0.42, "rollingResistance": 14, "downforce": 0.25,
-      "bodyColor": [236, 236, 240], "stripeColor": [215, 35, 40], "accentColor": [25, 55, 150],
+      "bodyColor": [222, 100, 30], "stripeColor": [215, 35, 40], "accentColor": [25, 55, 150],
       "rimColor": [215, 215, 220], "number": 7, "style": 0, "livery": 0
     },
     {
-      "id": "bianca", "name": "Bianca 2.4 RWD", "class": "Classic Group 4",
+      "id": "bianca", "model": "bianca", "name": "Bianca 2.4 RWD", "class": "Classic Group 4",
       "description": "Short-wheelbase rear-drive wedge. Twitchy, loud, and happiest sideways.",
       "drivetrain": "RWD", "mass": 1050,
       "halfExtents": [0.86, 0.30, 1.86], "rollInertiaScale": 1.6,
@@ -39,11 +39,11 @@
       "brakeForce": 10500, "brakeBias": 0.64, "handbrakeForce": 6500,
       "maxSteerDeg": 34, "steerSpeedReduction": 0.45, "steerRate": 5.0,
       "dragCoeff": 0.40, "rollingResistance": 12, "downforce": 0.15,
-      "bodyColor": [24, 92, 60], "stripeColor": [240, 200, 40], "accentColor": [235, 235, 220],
+      "bodyColor": [24, 120, 120], "stripeColor": [240, 200, 40], "accentColor": [235, 235, 220],
       "rimColor": [235, 205, 90], "number": 21, "style": 1, "livery": 2
     },
     {
-      "id": "vespera", "name": "Vespera 1.6 FWD", "class": "Junior / R2",
+      "id": "vespera", "model": "vespera", "name": "Vespera 1.6 FWD", "class": "Junior / R2",
       "description": "Light front-drive supermini. Carries speed, tucks in on lift-off, forgives mistakes.",
       "drivetrain": "FWD", "mass": 960,
       "halfExtents": [0.84, 0.32, 1.92], "rollInertiaScale": 1.7,
@@ -60,11 +60,11 @@
       "brakeForce": 9500, "brakeBias": 0.66, "handbrakeForce": 6000,
       "maxSteerDeg": 33, "steerSpeedReduction": 0.45, "steerRate": 5.2,
       "dragCoeff": 0.38, "rollingResistance": 11, "downforce": 0.15,
-      "bodyColor": [250, 200, 30], "stripeColor": [210, 40, 40], "accentColor": [22, 22, 26],
+      "bodyColor": [230, 190, 40], "stripeColor": [210, 40, 40], "accentColor": [22, 22, 26],
       "roofColor": [22, 22, 26], "rimColor": [32, 32, 36], "number": 3, "style": 2, "livery": 1
     },
     {
-      "id": "imperia", "name": "Imperia Evo", "class": "Group N",
+      "id": "imperia", "model": "imperia", "name": "Imperia Evo", "class": "Group N",
       "description": "Turbo AWD saloon. Huge mid-range punch, stable on the brakes, a little nose-heavy.",
       "drivetrain": "AWD", "frontTorqueShare": 0.45, "mass": 1300,
       "halfExtents": [0.9, 0.34, 2.25], "rollInertiaScale": 1.7,
@@ -81,11 +81,11 @@
       "brakeForce": 12500, "brakeBias": 0.6, "handbrakeForce": 7000,
       "maxSteerDeg": 31, "steerSpeedReduction": 0.42, "steerRate": 4.6,
       "dragCoeff": 0.4, "rollingResistance": 14, "downforce": 0.35,
-      "bodyColor": [28, 58, 140], "stripeColor": [250, 200, 30], "accentColor": [240, 240, 240],
+      "bodyColor": [28, 52, 92], "stripeColor": [250, 200, 30], "accentColor": [240, 240, 240],
       "rimColor": [212, 172, 60], "number": 5, "style": 3, "livery": 2
     },
     {
-      "id": "quattra", "name": "Quattra S1", "class": "Group B",
+      "id": "quattra", "model": "quattra", "name": "Quattra S1", "class": "Group B",
       "description": "Five-cylinder turbo monster. Nothing below 4000 rpm, then everything at once.",
       "drivetrain": "AWD", "frontTorqueShare": 0.4, "mass": 1100,
       "halfExtents": [0.92, 0.33, 2.0], "rollInertiaScale": 1.7,
@@ -102,11 +102,11 @@
       "brakeForce": 11000, "brakeBias": 0.6, "handbrakeForce": 6500,
       "maxSteerDeg": 30, "steerSpeedReduction": 0.42, "steerRate": 4.5,
       "dragCoeff": 0.45, "rollingResistance": 14, "downforce": 0.3,
-      "bodyColor": [238, 238, 232], "stripeColor": [205, 20, 30], "accentColor": [20, 20, 25],
+      "bodyColor": [122, 22, 42], "stripeColor": [205, 20, 30], "accentColor": [20, 20, 25],
       "rimColor": [235, 235, 238], "number": 1, "style": 4, "livery": 2
     },
     {
-      "id": "mito", "name": "Mito 1300", "class": "Classic Group 2",
+      "id": "mito", "model": "mito", "name": "Mito 1300", "class": "Classic Group 2",
       "description": "Tiny front-drive classic. Not much power, all the grip you need, and it goes where you point it.",
       "drivetrain": "FWD", "mass": 700,
       "halfExtents": [0.72, 0.3, 1.55], "rollInertiaScale": 1.6,
@@ -123,11 +123,11 @@
       "brakeForce": 7000, "brakeBias": 0.66, "handbrakeForce": 4500,
       "maxSteerDeg": 34, "steerSpeedReduction": 0.5, "steerRate": 5.5,
       "dragCoeff": 0.36, "rollingResistance": 9, "downforce": 0.05,
-      "bodyColor": [200, 25, 30], "stripeColor": [245, 245, 245], "accentColor": [22, 22, 26],
+      "bodyColor": [170, 40, 30], "stripeColor": [245, 245, 245], "accentColor": [22, 22, 26],
       "roofColor": [245, 245, 245], "rimColor": [220, 220, 225], "number": 37, "style": 5, "livery": 0
     },
     {
-      "id": "vortex", "name": "Vortex R1", "class": "Rally1",
+      "id": "vortex", "model": "vortex", "name": "Vortex R1", "class": "Rally1",
       "description": "Modern top-class AWD. Brutal acceleration, real downforce, lightning shifts.",
       "drivetrain": "AWD", "frontTorqueShare": 0.48, "mass": 1260,
       "halfExtents": [0.94, 0.32, 2.05], "rollInertiaScale": 1.8,
@@ -144,11 +144,11 @@
       "brakeForce": 13500, "brakeBias": 0.6, "handbrakeForce": 7500,
       "maxSteerDeg": 32, "steerSpeedReduction": 0.42, "steerRate": 5.0,
       "dragCoeff": 0.44, "rollingResistance": 14, "downforce": 0.6,
-      "bodyColor": [22, 24, 32], "stripeColor": [0, 200, 220], "accentColor": [240, 60, 120],
+      "bodyColor": [30, 30, 34], "stripeColor": [0, 200, 220], "accentColor": [240, 60, 120],
       "rimColor": [44, 44, 50], "number": 11, "style": 6, "livery": 2
     },
     {
-      "id": "escala", "name": "Escala Mk2 2.0", "class": "Classic Group 4",
+      "id": "escala", "model": "escala", "name": "Escala Mk2 2.0", "class": "Classic Group 4",
       "description": "70s rear-drive saloon with a screaming 16-valve. Light, loose, endlessly sideways.",
       "drivetrain": "RWD", "mass": 980,
       "halfExtents": [0.84, 0.33, 2.05], "rollInertiaScale": 1.6,
@@ -165,11 +165,11 @@
       "brakeForce": 9500, "brakeBias": 0.62, "handbrakeForce": 6000,
       "maxSteerDeg": 33, "steerSpeedReduction": 0.48, "steerRate": 5.0,
       "dragCoeff": 0.42, "rollingResistance": 12, "downforce": 0.05,
-      "bodyColor": [245, 245, 240], "stripeColor": [30, 60, 160], "accentColor": [220, 40, 40],
+      "bodyColor": [30, 112, 72], "stripeColor": [30, 60, 160], "accentColor": [220, 40, 40],
       "rimColor": [205, 205, 210], "number": 12, "style": 7, "livery": 3
     },
     {
-      "id": "banshee", "name": "Banshee T3 V8", "class": "Rally-Raid T1",
+      "id": "banshee", "model": "banshee", "name": "Banshee T3 V8", "class": "Rally-Raid T1",
       "description": "5.0 V8 desert racer. Huge suspension travel soaks up anything; heavy, but unstoppable.",
       "drivetrain": "AWD", "frontTorqueShare": 0.45, "mass": 1900,
       "halfExtents": [1.0, 0.48, 2.4], "rollInertiaScale": 2.0,
@@ -186,7 +186,7 @@
       "brakeForce": 16000, "brakeBias": 0.6, "handbrakeForce": 9000,
       "maxSteerDeg": 30, "steerSpeedReduction": 0.45, "steerRate": 4.0,
       "dragCoeff": 0.55, "rollingResistance": 18, "downforce": 0.0,
-      "bodyColor": [232, 118, 20], "stripeColor": [22, 22, 26], "accentColor": [40, 40, 46],
+      "bodyColor": [95, 100, 105], "stripeColor": [22, 22, 26], "accentColor": [40, 40, 46],
       "rimColor": [44, 44, 50], "number": 301, "style": 8, "livery": 1
     }
   ]

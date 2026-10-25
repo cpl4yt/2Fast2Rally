@@ -38,6 +38,7 @@ namespace rally {
 		lightsBroken = 0;
 		lastImpact = 0.0f;
 		impactCount = 0;
+		mech = MechState{};
 		applySpec(spec);
 		resetTo(pos, yaw);
 	}
@@ -165,7 +166,7 @@ namespace rally {
 					bool matched = targetOmega > 20.0f && diff < targetOmega * 0.08f + 12.0f;
 					if (matched) gear_ = want;
 					else {
-						if (grindCooldown_ <= 0.0f) { pendingGrind = true; grindCooldown_ = 0.35f; }
+						if (grindCooldown_ <= 0.0f) { pendingGrind = true; grindCooldown_ = 0.35f; ++tele_.grinds; }
 						gear_ = 0;
 					}
 				}
@@ -243,7 +244,8 @@ namespace rally {
 			steer_ += std::clamp(in.steer - steer_, -maxStep, maxStep);
 			lockScale = 1.0f + (spec_.steerSpeedReduction - 1.0f) * std::clamp(std::fabs(fwdSpeed) / 35.0f, 0.0f, 1.0f);
 		}
-		steerAngle_ = steer_ * spec_.maxSteerDeg * DEG2RAD * lockScale + steeringDamage * 0.06f;
+		steerAngle_ = steer_ * spec_.maxSteerDeg * DEG2RAD * lockScale + steeringDamage * 0.06f + mech.steerPull
+			+ mech.steerWobble * std::sin(tele_.distance * 1.7f) * std::min(1.0f, absSpeed / 15.0f);
 
 		// --- Gearbox & pedals ---
 		clutchPedal_ = in.clutch;
@@ -301,6 +303,13 @@ namespace rally {
 				Te = spec_.torqueAt(rpm_) * driveThrottle;
 				if (spec_.turbo) Te *= 0.62f + 0.38f * boost_;
 				Te *= 1.0f - 0.35f * engineDamage;
+				Te *= mech.powerMul;
+				// Misfires: a worn ignition stumbles now and then.
+				misfireTimer_ -= dt;
+				if (mech.misfire > 0.0f && misfireTimer_ <= 0.0f) {
+					misfireTimer_ = 0.05f;
+					if (rand01() < mech.misfire) { Te *= 0.1f; pendingBackfires += rand01() < 0.3f ? 1 : 0; }
+				}
 			}
 			// Idle governor.
 			if (rpm_ < spec_.idleRpm * 1.02f && driveThrottle < 0.3f)
@@ -311,13 +320,15 @@ namespace rally {
 
 		// Clutch torque: what it takes to bring the engine to the gearbox
 		// speed this step, limited by the clutch's capacity.
-		float Tcap = maxT * spec_.clutchTorqueScale * clutchEngage_;
+		float Tcap = maxT * spec_.clutchTorqueScale * clutchEngage_ * mech.clutchMul;
+		if (mech.noDrive) Tcap = 0.0f;
 		float Tc = 0.0f;
 		if (G != 0.0f && Tcap > 0.0f) {
 			float Tsync = Tnet + Ie * (engineOmega_ - omegaD) / dt;
 			Tc = std::clamp(Tsync, -Tcap, Tcap);
 		}
 		float driveForce = Tc * G * spec_.drivetrainEfficiency / spec_.wheelRadius;
+		if (G != 0.0f) tele_.clutchWork += std::fabs(Tc * (engineOmega_ - omegaD)) * dt;
 		tele_.driveForce = driveForce;
 
 		computeWheelForces(dt, in, ground, driveForce, brakePedal);
@@ -334,7 +345,8 @@ namespace rally {
 			if (transmission == 2 && G != 0.0f && clutchEngage_ > 0.3f) { engineRunning_ = false; pendingStall = true; }
 			else if (rpm_ < spec_.stallRpm * 0.6f && transmission != 2 && engineEnabled) engineOmega_ = idleW; // auto modes recover
 		}
-		if (!engineRunning_ && in.ignition && (gear_ == 0 || clutchPedal_ > 0.7f)) {
+		if (engineRunning_ && mech.engineKill) { engineRunning_ = false; pendingStall = true; }
+		if (!engineRunning_ && in.ignition && !mech.noIgnition && !mech.engineKill && (gear_ == 0 || clutchPedal_ > 0.7f)) {
 			engineRunning_ = true;
 			engineOmega_ = idleW;
 		}
@@ -375,6 +387,10 @@ namespace rally {
 		}
 
 		timeUpsideDown = (upV.y < 0.15f && absSpeed < 3.0f) ? timeUpsideDown + dt : 0.0f;
+		tele_.distance += absSpeed * dt;
+		if (limiter_) tele_.limiterTime += dt;
+		// A worn gearbox jumps out of gear under load.
+		if (gear_ > 0 && mech.popOutChance > 0.0f && driveThrottle > 0.5f && rand01() < mech.popOutChance * dt) { gear_ = 0; pendingGrind = true; }
 		prevVelocity_ = b->linearVelocity;
 	}
 
@@ -393,7 +409,7 @@ namespace rally {
 			w.prevCompression = w.compression;
 			Vector3 mount = add(pos, rotateVec(q, w.mountLocal));
 			w.contact = false;
-			if (dir.y < -0.3f) {
+			if (dir.y < -0.3f && !(mech.wheelOff & (1 << i))) {
 				float t = (mount.y - ground.heightAt(mount.x, mount.z)) / -dir.y;
 				for (int it = 0; it < 3; ++it) {
 					Vector3 p = add(mount, scale(dir, t));
@@ -413,13 +429,15 @@ namespace rally {
 			}
 			float k = w.front ? spec_.springFront : spec_.springRear;
 			float c = w.front ? spec_.damperFront : spec_.damperRear;
-			k *= 1.0f - 0.25f * suspensionDamage;
+			k *= (1.0f - 0.25f * suspensionDamage) * mech.springMul[i];
+			c *= mech.damperMul[i];
 			if (w.contact) {
 				float comp = std::min(w.compression, spec_.maxTravel);
 				float compVel = (w.compression - w.prevCompression) / dt;
 				float f = k * comp + c * compVel;
 				if (w.compression > spec_.maxTravel) f += k * 10.0f * (w.compression - spec_.maxTravel); // bump stop
 				springForce[i] = std::max(0.0f, f);
+				tele_.suspensionWork[i] += std::fabs(c * compVel * compVel) * dt;
 			}
 		}
 
@@ -460,7 +478,7 @@ namespace rally {
 			float vLat = dot(vPoint, sideG);
 
 			const SurfaceProps& sp = surfaceProps(w.surface);
-			float mu = sp.friction * spec_.grip * ground.gripMultiplier(w.surface) * (w.front ? 1.0f : spec_.rearGripBias);
+			float mu = sp.friction * spec_.grip * ground.gripMultiplier(w.surface) * (w.front ? 1.0f : spec_.rearGripBias) * mech.gripMul[i];
 			float maxF = mu * Fz;
 			float massShare = Fz / kG;
 
@@ -482,7 +500,8 @@ namespace rally {
 				Fdrive = std::min(Fdrive, cap);
 			}
 
-			float brakeMag = brakePedal * spec_.brakeForce * (w.front ? spec_.brakeBias : 1.0f - spec_.brakeBias) * 0.5f;
+			float brakeMag = brakePedal * spec_.brakeForce * (w.front ? spec_.brakeBias : 1.0f - spec_.brakeBias) * 0.5f * mech.brakeMul[i];
+			tele_.brakeWork[i] += brakeMag * std::fabs(vLong) * dt;
 			if (hb) brakeMag += spec_.handbrakeForce * 0.5f;
 			float Fbrake = 0.0f;
 			if (brakeMag > 0.0f) {
@@ -545,6 +564,7 @@ namespace rally {
 			if (w.spinning) s += 0.8f;
 			if (w.locked) s += 0.8f;
 			w.slipRatio = std::clamp(s, 0.0f, 1.0f);
+			tele_.tyreWork[i] += (std::fabs(Fy) * std::fabs(vLat) + (w.spinning || w.locked ? std::fabs(Fx) * std::fabs(vLong) * 0.3f : 0.0f)) * dt;
 			if (w.front) frontSlip = std::max(frontSlip, x); else rearSlip = std::max(rearSlip, x);
 
 			if (!w.spinning) w.spinRate = w.locked ? 0.0f : vLong / spec_.wheelRadius;
@@ -565,6 +585,7 @@ namespace rally {
 		float impact = Vector3Length(dv);
 		if (impact > 2.8f) {
 			lastImpact = impact;  // sound / particles
+			lastImpactLocal = Vector3RotateByQuaternion(dv, QuaternionInvert(q));
 			++impactCount;
 			Vector3 local = Vector3RotateByQuaternion(dv, QuaternionInvert(q));
 			// Damage only from hits into the car's front/back/sides - landings
@@ -624,5 +645,6 @@ namespace rally {
 		vis.dirt = dirt;
 		vis.damage = std::clamp((engineDamage + steeringDamage + suspensionDamage) / 3.0f, 0.0f, 1.0f);
 		vis.lightsBroken = lightsBroken;
+		vis.wheelMissing = mech.wheelOff;
 	}
 }

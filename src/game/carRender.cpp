@@ -3,12 +3,15 @@
 #include "game/meshBuilder.h"
 #include "core/ui.h"
 #include "core/settings.h"
+#include "core/log.h"
 #include <raymath.h>
 #include <rlgl.h>
 #include <cmath>
 #include <algorithm>
 #include <functional>
 #include <string>
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 namespace rally {
 	namespace {
@@ -101,6 +104,13 @@ namespace rally {
 
 	void CarRenderer::unload() {
 		if (!built_) return;
+		if (modelMode_) {
+			for (Model* m : { &modelBody_, &modelLower_, &modelWheel_ }) if (m->meshCount) UnloadModel(*m);
+			if (atlas_.id) UnloadTexture(atlas_);
+			modelBody_ = modelLower_ = modelWheel_ = Model{};
+			atlas_ = Texture2D{};
+			modelMode_ = false;
+		}
 		for (Mesh* m : { &body_, &cabin_, &glass_, &wheel_, &interior_, &crew_, &steering_, &headL_, &headR_, &pod_, &tail_, &numberQuad_, &clusterQuad_ })
 			if (m->vertexCount) UnloadMesh(*m);
 		UnloadRenderTexture(numberRT_);
@@ -171,9 +181,58 @@ namespace rally {
 		}
 		const bool wedge = sh.wedgeHull;
 		const float yb = -Hh + 0.04f;          // body bottom
-		const float belt = Hh + sh.beltOff;    // top of the lower body
+		float belt = Hh + sh.beltOff;          // top of the lower body
 		float roofY = belt + sh.roofH;
 		float cabFront = sh.cabFront, cabBack = sh.cabBack;
+
+		// --- Imported body: fit it to this car's wheels, and take the cabin
+		// measurements from it so the interior is laid out to match. ---
+		if (!spec.model.empty()) {
+			const std::string base = "res/models/cars/" + spec.model;
+			std::ifstream in(base + ".json");
+			if (in && FileExists((base + "_body.obj").c_str()) && FileExists("res/models/cars/atlas.png")) {
+				try {
+					nlohmann::json j = nlohmann::json::parse(in);
+					auto f = [&](const char* k) { return j.at(k).get<float>(); };
+					const float rM = f("wheelRadius"), tM = f("trackHalf"), zfM = f("frontAxleZ"), zrM = f("rearAxleZ");
+					const float sx = spec.trackHalf / tM, sy = spec.wheelRadius / rM, sz = (spec.frontAxleZ - spec.rearAxleZ) / (zfM - zrM);
+					// Wheel centre height at rest: the suspension sags under the car's weight.
+					const float sag = std::min(spec.maxTravel, spec.mass * 9.81f * 0.25f / (0.5f * (spec.springFront + spec.springRear)));
+					const float wheelY = spec.mountY - (spec.restLength - sag);
+					const float tz = (spec.frontAxleZ + spec.rearAxleZ) * 0.5f - (zfM + zrM) * 0.5f * sz;
+					modelM_ = MatrixMultiply(MatrixScale(sx, sy, sz), MatrixTranslate(0, wheelY - rM * sy, tz));
+					auto Y = [&](float y) { return (y - rM) * sy + wheelY; };
+					auto Z = [&](float z) { return z * sz + tz; };
+					modelBody_ = LoadModel((base + "_body.obj").c_str());
+					modelLower_ = LoadModel((base + "_lower.obj").c_str());
+					modelWheel_ = LoadModel((base + "_wheel.obj").c_str());
+					atlas_ = LoadTexture("res/models/cars/atlas.png");
+					if (modelBody_.meshCount > 0 && modelLower_.meshCount > 0 && modelWheel_.meshCount > 0 && atlas_.id) {
+						GenTextureMipmaps(&atlas_);
+						SetTextureFilter(atlas_, TEXTURE_FILTER_TRILINEAR);
+						modelMode_ = true;
+						modelWheelScale_ = sy;
+						belt = Y(f("belt"));
+						roofY = Y(f("roofY"));
+						cabFront = Z(f("cabFront"));
+						cabBack = Z(f("cabBack"));
+						sh.roofH = roofY - belt;
+						sh.frontSlope = std::max(0.3f, cabFront - Z(f("roofFront")));
+						sh.rearSlope = std::max(0.3f, Z(f("roofBack")) - cabBack);
+						numberX_ = f("width") * 0.5f * sx;
+						numberY_ = belt - 0.3f;
+						numberZ_ = Z(0.0f) - 0.3f;
+					}
+					else {
+						log::warn("car model %s: could not load", spec.model.c_str());
+						for (Model* m : { &modelBody_, &modelLower_, &modelWheel_ }) if (m->meshCount) UnloadModel(*m);
+						if (atlas_.id) UnloadTexture(atlas_);
+						modelBody_ = modelLower_ = modelWheel_ = Model{}; atlas_ = Texture2D{};
+					}
+				}
+				catch (const std::exception& e) { log::warn("car model %s: %s", spec.model.c_str(), e.what()); }
+			}
+		}
 		const Color roofC = spec.roofColor.a > 0 ? spec.roofColor : shade(bodyC, 0.95f);
 		const Color flareC = sh.flareBlack ? black : bodyC;
 
@@ -591,7 +650,14 @@ namespace rally {
 		float d = v.dirt * 0.65f;
 		Color dirtTint = { (unsigned char)(255 * (1 - d) + 150 * d), (unsigned char)(255 * (1 - d) + 122 * d), (unsigned char)(255 * (1 - d) + 92 * d), 255 };
 		mat.maps[MATERIAL_MAP_DIFFUSE].color = dirtTint;
-		DrawMesh(body_, mat, bodyM);
+		if (modelMode_) {
+			// Imported body. From inside only the part below the window line is
+			// drawn - the greenhouse is the (inside-out) procedural cabin below.
+			mat.maps[MATERIAL_MAP_DIFFUSE].texture = atlas_;
+			DrawMesh((view == CarView::Interior ? modelLower_ : modelBody_).meshes[0], mat, MatrixMultiply(modelM_, bodyM));
+			mat.maps[MATERIAL_MAP_DIFFUSE].texture = whiteTex;
+		}
+		else DrawMesh(body_, mat, bodyM);
 		if (view == CarView::Interior) {
 			// From inside, show the cabin shell's inner faces (roof, pillars).
 			rlDrawRenderBatchActive();
@@ -603,7 +669,7 @@ namespace rally {
 			rlSetCullFace(RL_CULL_FACE_BACK);
 			mat.maps[MATERIAL_MAP_DIFFUSE].color = dirtTint;
 		}
-		else DrawMesh(cabin_, mat, bodyM);
+		else if (!modelMode_) DrawMesh(cabin_, mat, bodyM);
 
 		// Numbers on both doors. (Material copies share their maps array, so
 		// swap the texture in place and put it back afterwards.)
@@ -611,7 +677,8 @@ namespace rally {
 			mat.maps[MATERIAL_MAP_DIFFUSE].texture = numberRT_.texture;
 			rlDisableBackfaceCulling();
 			for (float sx : { 1.0f, -1.0f }) {
-				Matrix m = MatrixMultiply(MatrixScale(1, 0.34f, sx > 0 ? -0.34f : 0.34f), MatrixTranslate(sx * (spec_.halfExtents.x + 0.012f), spec_.halfExtents.y - 0.1f, -0.25f));
+				float nx = modelMode_ ? numberX_ : spec_.halfExtents.x, ny = modelMode_ ? numberY_ : spec_.halfExtents.y - 0.1f, nz = modelMode_ ? numberZ_ : -0.25f;
+				Matrix m = MatrixMultiply(MatrixScale(1, 0.34f, sx > 0 ? -0.34f : 0.34f), MatrixTranslate(sx * (nx + 0.012f), ny, nz));
 				DrawMesh(numberQuad_, mat, MatrixMultiply(m, bodyM));
 			}
 			rlEnableBackfaceCulling();
@@ -621,17 +688,29 @@ namespace rally {
 		// Wheels.
 		mat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 		for (int i = 0; i < 4; ++i) {
+			if (v.wheelMissing & (1 << i)) continue;
 			spin_[i] = std::fmod(spin_[i] + v.wheelSpinRate[i] * dt, 2 * PI);
 			bool front = i < 2, left = (i % 2) == 0;
 			Vector3 mount = { left ? spec_.trackHalf : -spec_.trackHalf, spec_.mountY - v.wheelOffset[i], front ? spec_.frontAxleZ : spec_.rearAxleZ };
 			Matrix m = MatrixRotateX(spin_[i]);
 			if (front) m = MatrixMultiply(m, MatrixRotateY(-v.steerAngle));
+			if (modelMode_) {
+				// The imported wheel is a left one; turn it round for the right side.
+				if (!left) m = MatrixMultiply(MatrixRotateY(PI), m);
+				m = MatrixMultiply(MatrixScale(modelWheelScale_, modelWheelScale_, modelWheelScale_), m);
+			}
 			m = MatrixMultiply(m, MatrixTranslate(mount.x, mount.y, mount.z));
-			DrawMesh(wheel_, mat, MatrixMultiply(m, bodyM));
+			if (modelMode_) {
+				mat.maps[MATERIAL_MAP_DIFFUSE].texture = atlas_;
+				DrawMesh(modelWheel_.meshes[0], mat, MatrixMultiply(m, bodyM));
+				mat.maps[MATERIAL_MAP_DIFFUSE].texture = whiteTex;
+			}
+			else DrawMesh(wheel_, mat, MatrixMultiply(m, bodyM));
 		}
 
-		// Lights: emissive when on; dark when broken.
+		// Lights: emissive when on; dark when broken. (An imported body has its own.)
 		bool brakeOn = v.brake > 0.1f;
+		if (!modelMode_) {
 		world.setEmissive(1.0f);
 		Color lit = lampsOn ? Color{ 255, 255, 255, 255 } : Color{ 190, 190, 180, 255 };
 		Color broken = { 40, 40, 40, 255 };
@@ -646,10 +725,12 @@ namespace rally {
 		mat.maps[MATERIAL_MAP_DIFFUSE].color = brakeOn ? Color{ 255, 255, 255, 255 } : (lampsOn ? Color{ 200, 120, 120, 255 } : Color{ 120, 60, 60, 255 });
 		DrawMesh(tail_, mat, bodyM);
 		world.setEmissive(0.0f);
+		}
 
-		// Interior + crew.
+		// Interior + crew (an imported body hides them behind opaque windows).
 		mat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 		world.setEmissive(view == CarView::Interior ? 0.15f : 0.0f); // the roof shades the cabin; keep it readable
+		if (!modelMode_ || view == CarView::Interior) {
 		DrawMesh(interior_, mat, bodyM);
 		DrawMesh(crew_, mat, bodyM);
 		{
@@ -660,10 +741,11 @@ namespace rally {
 			m = MatrixMultiply(m, MatrixTranslate(hub.x, hub.y, hub.z));
 			DrawMesh(steering_, mat, MatrixMultiply(m, bodyM));
 		}
+		}
 		world.setEmissive(0.0f);
 
 		// Glass last (translucent). Skipped from inside so the view is clear.
-		if (view == CarView::Exterior) {
+		if (view == CarView::Exterior && !modelMode_) {
 			mat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 			DrawMesh(glass_, mat, bodyM);
 		}

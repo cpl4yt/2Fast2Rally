@@ -29,6 +29,13 @@ namespace rally {
 
 	private:
 		CarSpec spec_;
+		// Optional imported body (res/models/cars): colours come from one palette texture.
+		Model modelBody_{}, modelLower_{}, modelWheel_{};
+		Texture2D atlas_{};
+		bool modelMode_ = false;
+		Matrix modelM_{};              // model space -> car space
+		float modelWheelScale_ = 1.0f;
+		float numberX_ = 0, numberY_ = 0, numberZ_ = 0;
 		Mesh body_{}, cabin_{}, glass_{}, wheel_{}, interior_{}, crew_{}, steering_{}, headL_{}, headR_{}, pod_{}, tail_{}, numberQuad_{};
 		RenderTexture2D numberRT_{};
 		float spin_[4]{};

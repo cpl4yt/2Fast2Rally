@@ -47,6 +47,7 @@ namespace rally {
 				CarSpec c;
 				get(j, "id", c.id); get(j, "name", c.name); get(j, "class", c.carClass); get(j, "description", c.description);
 				c.soundPack = c.id; get(j, "sound", c.soundPack);
+				get(j, "model", c.model);
 				std::string dt = j.value("drivetrain", "AWD");
 				c.drivetrain = dt == "RWD" ? Drivetrain::RWD : dt == "FWD" ? Drivetrain::FWD : Drivetrain::AWD;
 				get(j, "frontTorqueShare", c.frontTorqueShare);
